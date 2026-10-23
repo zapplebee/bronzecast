@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.png binary
+
+# Imported geometry is text, but exporters often leave harmless blank lines at EOF.
+*.obj text eol=lf whitespace=-blank-at-eof
+*.mtl text eol=lf whitespace=-blank-at-eof

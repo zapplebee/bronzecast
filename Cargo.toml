@@ -1,0 +1,19 @@
+[package]
+name = "bronzecast"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8"
+chrono = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+macroquad = "0.4"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tobj = "4"
+tower-http = { version = "0.6", features = ["fs", "cors", "set-header"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3

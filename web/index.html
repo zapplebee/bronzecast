@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#080a10" />
+    <title>BRONZECAST // live signal</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="mark">◈</span> BRONZECAST
+          <span class="sub">/ SIGNAL RELAY 01</span>
+        </div>
+        <div class="live"><i></i> LIVE SIGNAL</div>
+      </header>
+      <section class="stage-wrap">
+        <video id="video" autoplay muted playsinline></video>
+      </section>
+      <section class="controls">
+        <div class="identity">
+          <span class="eyebrow">TRANSMISSION</span
+          ><strong>THE CHARACTER SIGNAL</strong
+          ><span class="muted" id="status">CONNECTING TO LIVE STREAM…</span>
+        </div>
+        <div class="actions">
+          <select
+            id="character"
+            class="button secondary"
+            aria-label="Active character"
+            disabled
+          >
+            <option>LOADING CHARACTERS…</option></select
+          ><button id="play" class="button secondary">
+            Ⅱ <span>PAUSE</span></button
+          ><button id="cast" class="button cast">
+            <span class="cast-icon">▣</span> CAST THIS STREAM
+          </button>
+        </div>
+      </section>
+      <footer>
+        <span>BRONZECAST <b>●</b> SHARED VIDEO FEED</span
+        ><span id="clock">LIVE · HLS</span
+        ><span>THE HUB PLAYS THE SAME SERVER STREAM</span>
+      </footer>
+    </main>
+    <script type="module" src="player.js"></script>
+  </body>
+</html>

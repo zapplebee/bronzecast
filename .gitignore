@@ -1,0 +1,18 @@
+/target/
+/stream/
+/scratch/
+
+# Local session context and original source-asset copies (runtime assets are in characters/).
+/MEMORY.md
+/mog_character/
+/Mr_Bones_--_Full_Final.obj
+
+# OS/editor files and Python caches.
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+*.log

@@ -1,0 +1,42 @@
+{
+  "default_character": "mog",
+  "characters": [
+    {
+      "id": "mog",
+      "name": "Mog",
+      "obj": "mog/mog.obj",
+      "rotation_degrees": [0, 180, 0],
+      "height": 4.8,
+      "max_width": 3.8,
+      "max_depth": 3.5,
+      "bounce": true,
+      "exclude_groups": []
+    },
+    {
+      "id": "chocobo",
+      "name": "Chocobo",
+      "obj": "chocobo/model.obj",
+      "rotation_degrees": [0, 180, 0],
+      "height": 4.8,
+      "max_width": 3.8,
+      "max_depth": 3.5,
+      "bounce": true,
+      "exclude_groups": []
+    },
+    {
+      "id": "monty-mole",
+      "name": "Monty Mole",
+      "obj": "monty-mole/model.obj",
+      "rotation_degrees": [0, 180, 0],
+      "height": 4.8,
+      "max_width": 4.8,
+      "max_depth": 3.5,
+      "bounce": true,
+      "exclude_groups": [
+        "choropoo_m1Shape[0][0]_(Layer_2)",
+        "choropoo_m1Shape[0][1]_(Layer_2)",
+        "choropoo_m1Shape[0][2]_(Layer_2)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxi-dev libgl1-mesa-dev libasound2-dev pkg-config
+      - name: Formatting
+        run: cargo fmt --check
+      - name: Asset and API tests
+        run: cargo test --locked
+      - name: Release build
+        run: cargo build --release --locked
+      - name: Script syntax
+        run: |
+          node --check web/player.js
+          python3 -m py_compile scripts/inspect-stream.py scripts/import-character.py
