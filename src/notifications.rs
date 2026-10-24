@@ -129,6 +129,32 @@ fn wrap(text: &str, width: f32, size: u16, max_lines: usize) -> Vec<String> {
     lines
 }
 
+fn prepare_font_atlas(
+    character_name: &str,
+    notifications: &[Notification],
+    stickers: &[StickerView],
+) {
+    let mut glyphs: Vec<char> = (32u8..=126).map(char::from).collect();
+    glyphs.extend(character_name.chars());
+    for notification in notifications {
+        glyphs.extend(notification.title.chars());
+        glyphs.extend(notification.message.chars());
+    }
+    for sticker in stickers {
+        glyphs.extend(sticker.title.as_deref().unwrap_or_default().chars());
+        glyphs.extend(sticker.text.as_deref().unwrap_or_default().chars());
+    }
+    glyphs.sort_unstable();
+    glyphs.dedup();
+
+    let font = get_default_font();
+    let dpi = screen_dpi_scale();
+    for logical_size in [10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 26, 62] {
+        let raster_size = (logical_size as f32 * dpi).ceil() as u16;
+        font.populate_font_cache(&glyphs, raster_size);
+    }
+}
+
 /// Draw directly into the encoder target: every media client sees this same feed.
 pub fn draw(
     feed: &SharedFeed,
@@ -144,6 +170,9 @@ pub fn draw(
             feed.entries.len(),
         )
     };
+    // Populate all glyphs/sizes before queuing any frame text. Macroquad may
+    // resize its glyph atlas when new text appears, invalidating queued quads.
+    prepare_font_atlas(character_name, &entries, stickers);
     let now = Local::now();
     let green = Color::from_rgba(157, 208, 104, 255);
     let muted = Color::from_rgba(81, 113, 66, 255);
