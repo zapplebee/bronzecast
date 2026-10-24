@@ -1,4 +1,5 @@
 use crate::open_item::OpenItem;
+use crate::stickers::StickerView;
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{Local, Timelike};
 use macroquad::prelude::*;
@@ -79,19 +80,44 @@ pub async fn clear(State(feed): State<SharedFeed>) -> StatusCode {
 }
 
 fn wrap(text: &str, width: f32, size: u16, max_lines: usize) -> Vec<String> {
-    let mut lines = vec![String::new()];
-    for c in text.chars() {
-        if c == '\n' {
+    let mut lines = Vec::new();
+    for paragraph in text.split('\n') {
+        let mut current = String::new();
+        for word in paragraph.split_whitespace() {
+            let candidate = if current.is_empty() {
+                word.to_owned()
+            } else {
+                format!("{current} {word}")
+            };
+            if measure_text(&candidate, None, size, 1.0).width <= width {
+                current = candidate;
+                continue;
+            }
+            if !current.is_empty() {
+                lines.push(std::mem::take(&mut current));
+            }
+            if measure_text(word, None, size, 1.0).width <= width {
+                current = word.to_owned();
+            } else {
+                for c in word.chars() {
+                    let candidate = format!("{current}{c}");
+                    if measure_text(&candidate, None, size, 1.0).width > width
+                        && !current.is_empty()
+                    {
+                        lines.push(std::mem::take(&mut current));
+                    }
+                    current.push(c);
+                }
+            }
+        }
+        if !current.is_empty() {
+            lines.push(current);
+        } else if paragraph.is_empty() {
             lines.push(String::new());
-            continue;
         }
-        let current = lines.last_mut().unwrap();
-        let candidate = format!("{current}{c}");
-        if measure_text(&candidate, None, size, 1.0).width > width && !current.is_empty() {
-            lines.push(c.to_string());
-        } else {
-            current.push(c);
-        }
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
     }
     if lines.len() > max_lines {
         lines.truncate(max_lines);
@@ -105,7 +131,13 @@ fn wrap(text: &str, width: f32, size: u16, max_lines: usize) -> Vec<String> {
 }
 
 /// Draw directly into the encoder target: every media client sees this same feed.
-pub fn draw(feed: &SharedFeed, open_item: Option<&OpenItem>, elapsed: f32, character_name: &str) {
+pub fn draw(
+    feed: &SharedFeed,
+    open_item: Option<&OpenItem>,
+    stickers: &[StickerView],
+    elapsed: f32,
+    character_name: &str,
+) {
     let (entries, count): (Vec<_>, _) = {
         let feed = feed.lock().unwrap();
         (
@@ -117,11 +149,13 @@ pub fn draw(feed: &SharedFeed, open_item: Option<&OpenItem>, elapsed: f32, chara
     let green = Color::from_rgba(157, 208, 104, 255);
     let muted = Color::from_rgba(81, 113, 66, 255);
     let ink = Color::from_rgba(4, 12, 7, 245);
-    draw_rectangle(28.0, 24.0, 384.0, 94.0, ink);
-    draw_rectangle_lines(28.0, 24.0, 384.0, 94.0, 1.0, green);
+    let header_x = 196.0;
+    let header_width = 440.0 - header_x;
+    draw_rectangle(header_x, 24.0, header_width, 94.0, ink);
+    draw_rectangle_lines(header_x, 24.0, header_width, 94.0, 1.0, green);
     draw_text(
         &format!("{} / SIGNAL HOST", character_name.to_uppercase()),
-        42.0,
+        header_x + 14.0,
         45.0,
         15.0,
         green,
@@ -129,9 +163,9 @@ pub fn draw(feed: &SharedFeed, open_item: Option<&OpenItem>, elapsed: f32, chara
     let latest = entries
         .first()
         .map(|n| n.title.as_str())
-        .unwrap_or("Listening for notifications...");
-    for (i, line) in wrap(latest, 350.0, 19, 2).iter().enumerate() {
-        draw_text(line, 42.0, 74.0 + i as f32 * 22.0, 19.0, green);
+        .unwrap_or("Awaiting notifications");
+    for (i, line) in wrap(latest, header_width - 28.0, 19, 2).iter().enumerate() {
+        draw_text(line, header_x + 14.0, 74.0 + i as f32 * 22.0, 19.0, green);
     }
     draw_line(448.0, 24.0, 448.0, 512.0, 1.0, muted);
     let ivory = Color::from_rgba(224, 229, 207, 255);
@@ -191,23 +225,52 @@ pub fn draw(feed: &SharedFeed, open_item: Option<&OpenItem>, elapsed: f32, chara
         draw_text(value, x + 12.0, 218.0, 19.0, green);
     }
     draw_text("NOTIFICATIONS / NEWEST FIRST", 476.0, 253.0, 13.0, green);
+    let cards = [
+        (
+            Color::from_rgba(255, 222, 190, 255),
+            Color::from_rgba(255, 166, 72, 255),
+        ),
+        (
+            Color::from_rgba(255, 238, 150, 255),
+            Color::from_rgba(255, 214, 72, 255),
+        ),
+        (
+            Color::from_rgba(210, 242, 200, 255),
+            Color::from_rgba(145, 205, 106, 255),
+        ),
+    ];
     if entries.is_empty() {
+        crate::stickers::sticker_card(470.0, 278.0, 460.0, 84.0, cards[0].0);
+        crate::stickers::mini_fruit(506.0, 320.0, 24.0, cards[0].1);
         draw_text(
-            "All quiet. Your host is on watch.",
-            476.0,
-            308.0,
-            20.0,
-            ivory,
+            "ALL QUIET",
+            546.0,
+            306.0,
+            14.0,
+            crate::stickers::muted_ink(),
         );
-        draw_text("POST /api/notifications", 476.0, 337.0, 16.0, muted);
+        draw_text(
+            "Your host is on watch.",
+            546.0,
+            334.0,
+            20.0,
+            crate::stickers::ink(),
+        );
+        draw_text(
+            "POST /api/notifications",
+            546.0,
+            352.0,
+            13.0,
+            crate::stickers::muted_ink(),
+        );
     }
     for (i, entry) in entries.iter().enumerate() {
-        let y = 267.0 + i as f32 * 82.0;
-        draw_rectangle(470.0, y, 460.0, 75.0, ink);
-        draw_rectangle_lines(470.0, y, 460.0, 75.0, 1.0, muted);
-        draw_rectangle(470.0, y, 3.0, 75.0, green);
-        let title = wrap(&entry.title, 340.0, 17, 1);
-        draw_text(&title[0], 486.0, y + 22.0, 17.0, green);
+        let (fill, fruit) = cards[i % cards.len()];
+        let y = 267.0 + i as f32 * 84.0;
+        crate::stickers::sticker_card(470.0, y, 460.0, 76.0, fill);
+        crate::stickers::mini_fruit(504.0, y + 38.0, 21.0, fruit);
+        let title = wrap(&entry.title, 330.0, 17, 1);
+        draw_text(&title[0], 540.0, y + 27.0, 17.0, crate::stickers::ink());
         let age = (now.timestamp().max(0) as u64).saturating_sub(entry.created_at);
         let age_label = if age < 60 {
             "now".to_owned()
@@ -218,18 +281,25 @@ pub fn draw(feed: &SharedFeed, open_item: Option<&OpenItem>, elapsed: f32, chara
         } else {
             format!("{}d", age / 86400)
         };
-        draw_text(&age_label, 878.0, y + 22.0, 13.0, muted);
-        for (j, line) in wrap(&entry.message, 428.0, 16, 2).iter().enumerate() {
+        draw_text(
+            &age_label,
+            878.0,
+            y + 27.0,
+            13.0,
+            crate::stickers::muted_ink(),
+        );
+        for (j, line) in wrap(&entry.message, 330.0, 15, 2).iter().enumerate() {
             draw_text(
                 line,
-                486.0,
-                y + 43.0 + j as f32 * 18.0,
-                16.0,
-                Color::from_rgba(183, 198, 165, 255),
+                540.0,
+                y + 50.0 + j as f32 * 18.0,
+                15.0,
+                Color::from_rgba(92, 78, 62, 255),
             );
         }
     }
     draw_text("BRONZECAST / LOCAL SIGNAL", 28.0, 522.0, 12.0, muted);
+    crate::stickers::draw(stickers);
 }
 
 #[cfg(test)]

@@ -25,8 +25,10 @@ Run `cargo test --locked` and `cargo build --release --locked`. Verify a switch 
   thread. Models share lighting, animation, shadows, and the notification layout.
 - The character stays left; clock/dashboard/notifications stay right. Notifications
   are baked into the video, not a browser-only overlay. Notifications are ephemeral
-  and in-memory; the single open item is persistent state under
-  `BRONZECAST_STATE_DIR` (default `state/`) and must survive renderer restarts.
+  and in-memory; the open item and stickers (including the tomato timer) are
+  persistent state under `BRONZECAST_STATE_DIR` (default `state/`) and must
+  survive renderer restarts. Stickers may be placed anywhere; the timer defaults
+  to the top-left of the character frame, so keep the character header beside it.
 - Preserve user-supplied source assets in `scratch/` and the original asset folders.
 - Light falloff uses horizontal-only coverage dithering, with different treatment
   for floor/model. Avoid fake dead pixels, vertical grids, or row displacement.

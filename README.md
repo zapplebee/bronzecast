@@ -62,6 +62,40 @@ The public API is proxied to the renderer on port 8081. When the renderer is
 offline, character/notification APIs return 503 while the test-card video keeps
 playing. `GET /api/stream` remains available and reports live/fallback input status.
 
+## Stickers and tomato timer
+
+Persistent stickers can be placed anywhere on the 960×540 video board. The
+renderer supports auto-updating countdowns, a tomato timer, plain reminders, and
+todos. They are stored in `state/stickers.json`, so they survive renderer
+restarts; the default tomato timer is seeded at the top-left of the character
+frame.
+
+```sh
+curl http://localhost:8080/api/stickers
+
+curl -X POST http://localhost:8080/api/stickers \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"countdown","x":476,"y":380,"text":"til Halloween","target":"2026-10-31"}'
+
+curl -X PATCH http://localhost:8080/api/stickers/2 \
+  -H 'Content-Type: application/json' \
+  -d '{"x":500,"y":400}'
+
+curl -X DELETE http://localhost:8080/api/stickers/2
+```
+
+`POST /api/stickers` requires `kind` (`countdown`, `timer`, `reminder`, or
+`todo`), `x`, and `y`. Countdowns require `text` and a `YYYY-MM-DD` `target`;
+timers accept optional `duration_seconds` (1–3600); todos accept `done`.
+`PATCH` accepts `x`, `y`, `text`, `target`, `done`, and, for timers, `action`
+(`start`, `pause`, `reset`, or `set`) plus `duration_seconds`. `set` requires a
+duration.
+
+The tomato timer remains available through `GET/POST /api/timer`. `GET` returns
+the timer sticker; `POST` takes `action` and optional `duration_seconds` and
+moves the first timer sticker if `x`/`y` are supplied. Sticker positions are
+clamped to keep the card on-screen.
+
 ## Home dashboard
 
 The right-hand panel includes a large 12-hour clock with seconds, weekday/date,
@@ -148,7 +182,8 @@ encoded into the shared video feed.
 `mcp/` serves the dashboard to MCP clients at `POST /mcp` with an OAuth
 authorization server in front of it. Clients register through DCR or a Client ID
 Metadata Document, then approve access on a page that takes the static key. Tools
-read status, switch characters, add or clear notifications, and pin or clear the
-persistent open item; mutations require the `bronzecast.write` scope. Set
+read status, switch characters, add or clear notifications, pin or clear the
+persistent open item, place or edit stickers, and start or pause the tomato
+timer; mutations require the `bronzecast.write` scope. Set
 `BRONZECAST_MCP_ACCESS_KEYS` on the MCP service and `BRONZECAST_WRITE_KEY` on
 playout to protect public writes. See [`docs/MCP.md`](docs/MCP.md).

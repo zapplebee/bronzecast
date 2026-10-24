@@ -2,6 +2,7 @@ use macroquad::prelude::*;
 mod characters;
 mod notifications;
 mod open_item;
+mod stickers;
 use std::{
     io::Write,
     process::{Child, ChildStdin, Command, Stdio},
@@ -143,6 +144,7 @@ fn start_control_server(
     feed: notifications::SharedFeed,
     selection: characters::SharedSelection,
     open_item: open_item::SharedOpenItem,
+    sticker_store: stickers::SharedStickers,
 ) {
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -161,7 +163,8 @@ fn start_control_server(
                 )
                 .with_state(feed)
                 .merge(characters::routes(selection))
-                .merge(open_item::routes(open_item));
+                .merge(open_item::routes(open_item))
+                .merge(stickers::routes(sticker_store));
             let address =
                 std::env::var("BRONZECAST_CONTROL_ADDR").unwrap_or_else(|_| "0.0.0.0:8081".into());
             let listener = tokio::net::TcpListener::bind(&address)
@@ -289,7 +292,13 @@ async fn main() {
     let feed = notifications::SharedFeed::default();
     let state_dir = std::env::var("BRONZECAST_STATE_DIR").unwrap_or_else(|_| "state".into());
     let open_item = open_item::Store::load(&state_dir);
-    start_control_server(feed.clone(), selection.clone(), open_item.clone());
+    let sticker_store = stickers::Store::load(&state_dir);
+    start_control_server(
+        feed.clone(),
+        selection.clone(),
+        open_item.clone(),
+        sticker_store.clone(),
+    );
     let started = get_time() as f32;
     let mut frame = 0u64;
     let mut next_encode_at = 0.0f32;
@@ -398,7 +407,14 @@ async fn main() {
         );
         gl_use_default_material();
         let pinned = open_item.snapshot();
-        notifications::draw(&feed, pinned.as_ref(), t, &character.spec.name);
+        let sticker_views = sticker_store.snapshot();
+        notifications::draw(
+            &feed,
+            pinned.as_ref(),
+            &sticker_views,
+            t,
+            &character.spec.name,
+        );
 
         set_default_camera();
         clear_background(BLACK);

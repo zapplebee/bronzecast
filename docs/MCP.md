@@ -65,7 +65,7 @@ must be `none`, and PKCE with `S256` is mandatory. There are no client secrets.
 
 | Tool | Scope | Effect |
 | --- | --- | --- |
-| `bronzecast_get_status` | read | Character, open item, notifications, and stream health in one call. |
+| `bronzecast_get_status` | read | Character, open item, stickers, notifications, and stream health in one call. |
 | `bronzecast_list_characters` | read | Available characters plus active/requested ids. |
 | `bronzecast_switch_character` | write | `{id}`; applied on the next rendered frame. |
 | `bronzecast_list_notifications` | read | Current notification queue. |
@@ -74,6 +74,12 @@ must be `none`, and PKCE with `S256` is mandatory. There are no client secrets.
 | `bronzecast_get_open_item` | read | The persistent reminder, or `null`. |
 | `bronzecast_set_open_item` | write | `{title, note?}`; 48/160 character limits. |
 | `bronzecast_clear_open_item` | write | Removes the persistent reminder. |
+| `bronzecast_list_stickers` | read | Every persistent sticker and its computed state. |
+| `bronzecast_add_sticker` | write | `{kind, x, y, text?, target?, duration_seconds?, done?}`. |
+| `bronzecast_update_sticker` | write | `{id, x?, y?, text?, target?, done?, action?, duration_seconds?}`. |
+| `bronzecast_remove_sticker` | write | `{id}`; deletes the sticker. |
+| `bronzecast_get_timer` | read | Tomato timer sticker duration, remaining, and state. |
+| `bronzecast_set_timer` | write | `{action, duration_seconds?, x?, y?}`; start, pause, reset, or set. |
 | `bronzecast_stream_status` | read | Playout source, frame age, encoder state. |
 
 The open item is the anti-notification: one persistent reminder, shown as a
@@ -81,6 +87,19 @@ dashboard card with the title at the bottom. It lives on the renderer, not in th
 service, and is written to `BRONZECAST_STATE_DIR` (default `state/`) so it
 survives renderer restarts. Setting the same title again keeps the original
 `opened_at`; changing the title starts a new age.
+
+Stickers are persistent, positionable cards rendered into the video. They live
+in `stickers.json` under `BRONZECAST_STATE_DIR` and survive renderer restarts.
+`kind` is `countdown`, `timer`, `reminder`, or `todo`; positions use the
+960×540 board coordinate space and are clamped on-screen. Countdowns require a
+`YYYY-MM-DD` target and update automatically; reminders are plain text; todos
+accept `done`; timers accept `action` (`start`, `pause`, `reset`, or `set`) and
+an optional `duration_seconds` (1–3600). `set` requires a duration.
+
+The tomato timer is a sticker seeded at the top-left of the character frame and
+defaults to 25 minutes. `get_timer`/`set_timer` are compatibility aliases that
+read or update the first timer sticker. Legacy `timer.json` state is migrated
+when no `stickers.json` exists.
 
 Resource: `bronzecast://dashboard/state` returns the same snapshot as
 `bronzecast_get_status`.
@@ -100,7 +119,7 @@ Resource: `bronzecast://dashboard/state` returns the same snapshot as
 | `PORT` | `8090` | Listen port. |
 
 The playout side has a matching `BRONZECAST_WRITE_KEY`. When set, writes
-(`POST`, `PUT`, `DELETE`) through the public playout require
+(`POST`, `PUT`, `PATCH`, `DELETE`) through the public playout require
 `Authorization: Bearer <key>` or `X-Bronzecast-Key: <key>`; `GET`s stay public
 for the player. The web UI prompts
 for the key on the first rejected character switch and keeps it in

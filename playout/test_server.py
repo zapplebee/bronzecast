@@ -6,6 +6,7 @@ from playout.server import (
     AUDIO_BYTES,
     FRAME_BYTES,
     MediaBuffer,
+    api_path_allowed,
     read_exact,
     write_authorized,
 )
@@ -57,6 +58,15 @@ class BufferTests(unittest.TestCase):
             buffer.sound(0, b'incomplete')
         self.assertIsNone(read_exact(io.BytesIO(b'ab'), 3))
         self.assertEqual(read_exact(io.BytesIO(b'abcd'), 3), b'abc')
+
+
+class ProxyPathTests(unittest.TestCase):
+    def test_sticker_paths_are_allowed(self):
+        self.assertTrue(api_path_allowed('/api/stickers'))
+        self.assertTrue(api_path_allowed('/api/stickers/12'))
+        self.assertTrue(api_path_allowed('/api/timer'))
+        self.assertFalse(api_path_allowed('/api/stickers-evil'))
+        self.assertFalse(api_path_allowed('/api/private'))
 
 
 class WriteAuthorizationTests(unittest.TestCase):

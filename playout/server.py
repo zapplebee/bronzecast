@@ -108,6 +108,20 @@ def write_all(fd, data):
         remaining = remaining[count:]
 
 
+API_PATHS = (
+    '/api/notifications',
+    '/api/characters',
+    '/api/character',
+    '/api/open-item',
+    '/api/timer',
+    '/api/stickers',
+)
+
+
+def api_path_allowed(path):
+    return path in API_PATHS or path.startswith('/api/stickers/')
+
+
 def write_authorized(headers, key):
     """Write requests pass when no key is configured; otherwise a bearer/header match is required."""
     if not key:
@@ -323,7 +337,7 @@ def handler_for(playout):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization, X-Bronzecast-Key')
             self.send_header('Access-Control-Expose-Headers', 'Content-Length, Content-Range')
-            self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS')
+            self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS')
             self.send_header('Cache-Control', 'no-store')
             super().end_headers()
 
@@ -341,8 +355,7 @@ def handler_for(playout):
 
         def proxy(self):
             path = urllib.parse.urlsplit(self.path).path
-            allowed = ('/api/notifications', '/api/characters', '/api/character', '/api/open-item')
-            if path not in allowed:
+            if not api_path_allowed(path):
                 self.respond(404, b'{"error":"Unknown API endpoint"}')
                 return
             if self.command != 'GET' and not write_authorized(self.headers, playout.write_key):
@@ -356,7 +369,7 @@ def handler_for(playout):
             if length < 0 or length > 16384:
                 self.respond(413, b'{"error":"Request too large"}')
                 return
-            payload = self.rfile.read(length) if self.command in ('POST', 'PUT') else None
+            payload = self.rfile.read(length) if self.command in ('POST', 'PUT', 'PATCH') else None
             request = urllib.request.Request(
                 playout.generator_url + path, data=payload, method=self.command,
                 headers={'Content-Type': self.headers.get('Content-Type', 'application/json')},
@@ -393,6 +406,9 @@ def handler_for(playout):
             self.proxy()
 
         def do_PUT(self):
+            self.proxy()
+
+        def do_PATCH(self):
             self.proxy()
 
         def do_DELETE(self):
