@@ -8,6 +8,28 @@
   --blue: #177cff;
   --muted: #788194;
 }
+
+.stage-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  border: 0;
+  background: #000;
+}
+#exit-fullscreen {
+  display: none;
+}
+.stage-wrap:fullscreen #exit-fullscreen {
+  display: block;
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  opacity: 0;
+}
+.stage-wrap:fullscreen:hover #exit-fullscreen,
+.stage-wrap:fullscreen #exit-fullscreen:focus-visible {
+  opacity: 1;
+}
 * {
   box-sizing: border-box;
 }
@@ -158,6 +180,7 @@ footer {
 }
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 .button {

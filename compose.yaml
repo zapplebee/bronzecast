@@ -1,0 +1,32 @@
+services:
+  playout:
+    build:
+      context: .
+      dockerfile: playout/Dockerfile
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "5000:5000/udp"
+    environment:
+      GENERATOR_URL: "http://host.docker.internal:8081"
+      INPUT_TIMEOUT: "1.5"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - hls:/data/hls
+      - ./web:/app/web:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+volumes:
+  hls:

@@ -13,8 +13,10 @@ Run `cargo test --locked` and `cargo build --release --locked`. Verify a switch 
 
 ## Architecture to preserve
 
-- Rust renders one live video; FFmpeg encodes it; browser and Nest Hub play that
-  same HLS feed. Do not introduce a separate browser/WebGL character renderer.
+- Rust renders one live video and sends H.264/AAC MPEG-TS over UDP :5000.
+  Docker playout owns the continuous output encoder and web/HLS :8080, switching
+  to a stylized RTF card + silence when input disappears. Renderer control is :8081.
+  Do not couple playout lifetime to generator restarts or add a browser/WebGL renderer.
 - HTTP handlers only request an active ID. GPU work belongs to the rendering
   thread. Models share lighting, animation, shadows, and the notification layout.
 - The character stays left; clock/dashboard/notifications stay right. Notifications

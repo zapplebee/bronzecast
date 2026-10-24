@@ -1,18 +1,29 @@
 # BRONZECAST
 
-BRONZECAST renders selectable characters with their supplied materials, stepped ivory lighting, subtly green contours, and crushed-black shading. Rust/Macroquad renders and FFmpeg encodes one live H.264/HLS stream, which both the web player and Cast device play.
+BRONZECAST renders selectable characters with their supplied materials, stepped ivory lighting, subtly green contours, and crushed-black shading. The host Rust renderer sends H.264/AAC over UDP to a persistent Docker playout service. The browser and Cast device play that service's continuous HLS video/audio feed—even while the renderer restarts.
 
 **[Add a character](docs/ADDING_CHARACTERS.md)** · **[Contribute](CONTRIBUTING.md)** · **[Asset provenance](characters/SOURCES.md)**
 
 ## Run
 
-Install Rust and FFmpeg (`ffmpeg` must be on `PATH`), then run from the project directory:
+Install Docker Compose, Rust, and FFmpeg (`ffmpeg` must be on `PATH`), then run from the project directory:
 
 ```sh
+docker compose up -d --build
 cargo run --release --locked
 ```
 
-The native render/encoder window and web server start together. Open `http://localhost:8080` on the host, or the printed LAN URL from another device. The stream is at `/stream/live.m3u8`; the web page previews this exact HLS feed.
+Open `http://localhost:8080` or `http://<host-LAN-IP>:8080` from another device.
+Docker serves the web app and `/stream/live.m3u8`; the host renderer opens a native
+preview and sends media to UDP port 5000. Stop/rebuild/restart the renderer freely:
+the shared stream switches to a stylized **1953 RTF test card with silence** until
+live input returns. The web player starts muted; use **Unmute** for audio.
+
+Use **Fullscreen**, double-click the video, or press **F** to fill the screen.
+Press Escape or use the fullscreen exit button to return; the video keeps its aspect ratio.
+
+See **[docs/PLAYOUT.md](docs/PLAYOUT.md)** for the process boundaries, configuration,
+audio input, and FFmpeg UDP sender examples.
 
 The current renderer needs a graphical desktop/OpenGL context. Run from the
 repository root. Tested locally on an Apple Silicon Mac with FFmpeg; automated
@@ -20,7 +31,7 @@ Linux CI checks builds and asset/API tests, not visual output.
 
 ## Cast
 
-Open the web app at its LAN URL in Chrome and use **Cast This Stream**. It sends the server's HLS media URL to Google's Default Media Receiver. The Hub must be able to reach the host at the same LAN URL. For HTTPS or network setups where the Hub cannot play local HTTP media, place the server behind a trusted HTTPS reverse proxy.
+Open the web app at its LAN URL in Chrome and use **Cast This Stream**. It sends the playout service's HLS media URL to Google's Default Media Receiver. The Hub must be able to reach the host at the same LAN URL. For HTTPS or network setups where the Hub cannot play local HTTP media, place the server behind a trusted HTTPS reverse proxy.
 
 The `/stream` routes supply cross-origin headers for Google's receiver and disable
 caching of live media responses. Encoding runs at 12 fps with two-second segments
@@ -46,6 +57,10 @@ cards on the right; long text is wrapped and visually truncated, while the API
 retains the full message. The green box above the character shows the newest
 title. Notifications are drawn **into the encoded video**, not just the web UI,
 so the browser and Hub both receive them, with several seconds of HLS delay.
+
+The public API is proxied to the renderer on port 8081. When the renderer is
+offline, character/notification APIs return 503 while the test-card video keeps
+playing. `GET /api/stream` remains available and reports live/fallback input status.
 
 ## Home dashboard
 

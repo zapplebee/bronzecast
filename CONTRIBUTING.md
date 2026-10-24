@@ -6,24 +6,27 @@ their own characters.
 
 ## Local setup
 
-Install a current stable Rust toolchain and FFmpeg with H.264 encoding support.
+Install Docker Compose, a current stable Rust toolchain and FFmpeg with H.264/AAC encoding support.
 The current renderer requires a graphical desktop/OpenGL context (it opens a
 native preview window). Blender is only needed when converting new DAE assets.
 
 ```sh
 git clone https://github.com/zapplebee/bronzecast.git
 cd bronzecast
+docker compose up -d --build
 cargo run --release --locked
 ```
 
-Open `http://localhost:8080`. Use the printed LAN address for other devices/Cast.
+Open `http://localhost:8080`. Use the host's LAN address on port 8080 for other devices/Cast.
 Run from the repository root so relative asset paths resolve.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
-| `src/main.rs` | Render loop, shared animation, post-processing, FFmpeg/HLS, HTTP startup |
+| `src/main.rs` | Render loop, shared animation, post-processing, FFmpeg UDP sender, control API on 8081 |
+| `playout/` | Containerized UDP ingest, bounded buffers, test-card/silence fallback, continuous HLS, web/API proxy |
+| `compose.yaml` | Persistent web/playout container and UDP port mapping |
 | `src/characters.rs` | Manifest validation, generic OBJ/material loader, character selection API |
 | `src/notifications.rs` | Notification API and dashboard drawn into the video |
 | `src/*.vert`, `src/*.frag` | Lighting and normal-pass shaders |
@@ -40,6 +43,8 @@ cargo fmt --check
 cargo test --locked
 cargo build --release --locked
 node --check web/player.js
+docker compose build
+docker compose run --rm --no-deps playout python -m unittest playout.test_server
 ```
 
 For rendering changes, also run the app and inspect an actual encoded light sweep:
@@ -66,3 +71,7 @@ necessary restart, preserve desired notifications from `GET /api/notifications`,
 then repost their title/message contents afterward. Selection and notifications
 are currently in memory. Avoid committing captures, personal notification data,
 credentials, or local session exports; `scratch/` is fully ignored.
+
+Leave playout running while iterating on the host renderer. A renderer restart
+must cause fallback and recovery without replacing the HLS output encoder.
+See [docs/PLAYOUT.md](docs/PLAYOUT.md) for input format and audio testing.

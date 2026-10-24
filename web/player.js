@@ -1,6 +1,59 @@
 const video = document.querySelector("#video");
 const status = document.querySelector("#status");
 const streamUrl = new URL("/stream/live.m3u8", location.origin).href;
+const stage = document.querySelector(".stage-wrap");
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (stage.requestFullscreen) await stage.requestFullscreen();
+    else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+    else status.textContent = "FULLSCREEN IS NOT SUPPORTED BY THIS BROWSER";
+  } catch (error) {
+    console.error(error);
+    status.textContent = "COULD NOT ENTER FULLSCREEN";
+  }
+}
+document
+  .querySelector("#fullscreen")
+  .addEventListener("click", toggleFullscreen);
+document
+  .querySelector("#exit-fullscreen")
+  .addEventListener("click", toggleFullscreen);
+video.addEventListener("dblclick", toggleFullscreen);
+document.addEventListener("keydown", (event) => {
+  if (
+    event.key.toLowerCase() === "f" &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+  ) {
+    event.preventDefault();
+    toggleFullscreen();
+  }
+});
+const muteButton = document.querySelector("#mute");
+muteButton.addEventListener("click", () => {
+  video.muted = !video.muted;
+  muteButton.textContent = video.muted ? "UNMUTE" : "MUTE";
+  muteButton.setAttribute("aria-pressed", String(video.muted));
+});
+async function refreshStream() {
+  const label = document.querySelector("#source");
+  try {
+    const response = await fetch("/api/stream", { cache: "no-store" });
+    if (!response.ok) throw new Error("Playout unavailable");
+    const state = await response.json();
+    label.textContent =
+      state.source === "live"
+        ? "UDP INPUT LIVE / VIDEO + AUDIO"
+        : "STANDBY CARD / WAITING FOR GENERATOR";
+  } catch {
+    label.textContent = "PLAYOUT SERVICE UNREACHABLE";
+  }
+}
+refreshStream();
+setInterval(refreshStream, 2000);
 
 if (window.Hls?.isSupported()) {
   const hls = new Hls({
@@ -114,7 +167,7 @@ async function refreshCharacters() {
     characterSelect.value = state.requested_id;
     characterSelect.disabled = false;
   } catch (error) {
-    console.error(error);
+    characterSelect.disabled = true;
   }
 }
 characterSelect.addEventListener("change", async () => {

@@ -32,3 +32,10 @@ jobs:
         run: |
           node --check web/player.js
           python3 -m py_compile scripts/inspect-stream.py scripts/import-character.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Playout buffers and fallback tests
+        run: |
+          pip install -r playout/requirements.txt
+          python -m unittest playout.test_server

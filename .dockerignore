@@ -1,0 +1,6 @@
+*
+!playout/
+!playout/**
+!web/
+!web/**
+**/__pycache__/

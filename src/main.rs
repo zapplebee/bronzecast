@@ -53,7 +53,7 @@ void main() {
 
 fn window_conf() -> Conf {
     Conf {
-        window_title: "BRONZECAST // live encoder".into(),
+        window_title: "BRONZECAST // GPU generator".into(),
         window_width: 960,
         window_height: 600,
         window_resizable: true,
@@ -61,28 +61,39 @@ fn window_conf() -> Conf {
     }
 }
 
-fn start_encoder() -> Result<(Child, ChildStdin), String> {
-    std::fs::create_dir_all("stream").map_err(|e| e.to_string())?;
-    let _ = std::fs::remove_file("stream/live.m3u8");
-    let mut child = Command::new("ffmpeg")
+fn start_sender() -> Result<(Child, ChildStdin), String> {
+    let destination = std::env::var("BRONZECAST_UDP_URL")
+        .unwrap_or_else(|_| "udp://127.0.0.1:5000?pkt_size=1316".into());
+    let mut command = Command::new("ffmpeg");
+    command.args([
+        "-hide_banner",
+        "-loglevel",
+        "warning",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-pixel_format",
+        "rgba",
+        "-video_size",
+        "960x540",
+        "-framerate",
+        "12",
+        "-i",
+        "-",
+    ]);
+    if let Ok(audio) = std::env::var("BRONZECAST_AUDIO_FILE") {
+        command.args(["-re", "-stream_loop", "-1", "-i", &audio]);
+    } else {
+        command.args(["-re", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]);
+    }
+    let mut child = command
         .args([
-            "-hide_banner",
-            "-loglevel",
-            "warning",
-            "-y",
-            "-f",
-            "rawvideo",
-            "-pixel_format",
-            "rgba",
-            "-video_size",
-            "960x540",
-            "-framerate",
-            "12",
-            "-i",
-            "-",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
             "-vf",
             "vflip",
-            "-an",
             "-c:v",
             "libx264",
             "-preset",
@@ -92,28 +103,42 @@ fn start_encoder() -> Result<(Child, ChildStdin), String> {
             "-pix_fmt",
             "yuv420p",
             "-g",
-            "24",
+            "12",
+            "-bf",
+            "0",
             "-sc_threshold",
             "0",
-            "-f",
-            "hls",
-            "-hls_time",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-ar",
+            "48000",
+            "-ac",
             "2",
-            "-hls_list_size",
-            "6",
-            "-hls_flags",
-            "delete_segments+append_list+omit_endlist",
-            "stream/live.m3u8",
+            "-shortest",
+            "-f",
+            "mpegts",
+            "-mpegts_flags",
+            "+resend_headers+initial_discontinuity",
+            "-muxdelay",
+            "0",
+            "-muxpreload",
+            "0",
+            "-flush_packets",
+            "1",
+            &destination,
         ])
         .stdin(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|e| format!("could not start ffmpeg (install ffmpeg and add it to PATH): {e}"))?;
     let stdin = child.stdin.take().ok_or("could not open ffmpeg input")?;
+    println!("Sending H.264 + AAC over MPEG-TS to {destination}");
     Ok((child, stdin))
 }
 
-fn start_web_server(feed: notifications::SharedFeed, selection: characters::SharedSelection) {
+fn start_control_server(feed: notifications::SharedFeed, selection: characters::SharedSelection) {
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -121,9 +146,6 @@ fn start_web_server(feed: notifications::SharedFeed, selection: characters::Shar
             .expect("tokio runtime");
         runtime.block_on(async {
             use axum::Router;
-            use tower_http::{
-                cors::CorsLayer, services::ServeDir, set_header::SetResponseHeaderLayer,
-            };
 
             let app = Router::new()
                 .route(
@@ -131,33 +153,16 @@ fn start_web_server(feed: notifications::SharedFeed, selection: characters::Shar
                     axum::routing::get(notifications::list).post(notifications::post),
                 )
                 .with_state(feed)
-                .merge(characters::routes(selection))
-                .nest_service(
-                    "/stream",
-                    Router::new()
-                        .fallback_service(ServeDir::new("stream"))
-                        .layer(SetResponseHeaderLayer::overriding(
-                            axum::http::header::CACHE_CONTROL,
-                            axum::http::HeaderValue::from_static("no-store"),
-                        ))
-                        .layer(CorsLayer::permissive()),
-                )
-                .nest_service("/assets/characters", ServeDir::new("characters"))
-                .fallback_service(ServeDir::new("web"));
-            let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
+                .merge(characters::routes(selection));
+            let address =
+                std::env::var("BRONZECAST_CONTROL_ADDR").unwrap_or_else(|_| "0.0.0.0:8081".into());
+            let listener = tokio::net::TcpListener::bind(&address)
                 .await
-                .expect("bind port 8080");
-            println!("BRONZECAST web player: http://localhost:8080");
-            if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
-                if socket.connect("192.0.2.1:80").is_ok() {
-                    if let Ok(addr) = socket.local_addr() {
-                        println!("LAN player: http://{}:8080", addr.ip());
-                    }
-                }
-            }
+                .expect("bind generator control address");
+            println!("Generator control API: {address}; web/HLS is served by Docker on :8080");
             axum::serve(listener, app)
                 .await
-                .expect("serve video player");
+                .expect("serve renderer controls");
         });
     });
 }
@@ -266,7 +271,7 @@ async fn main() {
     let output_target = render_target(WIDTH, HEIGHT);
     output_target.texture.set_filter(FilterMode::Nearest);
     material.set_texture("SceneTexture", scene_target.texture.clone());
-    let (mut encoder, mut input) = match start_encoder() {
+    let (mut encoder, mut input) = match start_sender() {
         Ok(v) => v,
         Err(error) => {
             eprintln!("{error}");
@@ -274,7 +279,7 @@ async fn main() {
         }
     };
     let feed = notifications::SharedFeed::default();
-    start_web_server(feed.clone(), selection.clone());
+    start_control_server(feed.clone(), selection.clone());
     let started = get_time() as f32;
     let mut frame = 0u64;
     let mut next_encode_at = 0.0f32;
@@ -420,4 +425,5 @@ async fn main() {
     }
     drop(input);
     let _ = encoder.kill();
+    let _ = encoder.wait();
 }

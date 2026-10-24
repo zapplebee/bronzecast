@@ -21,12 +21,20 @@
       </header>
       <section class="stage-wrap">
         <video id="video" autoplay muted playsinline></video>
+        <button
+          id="exit-fullscreen"
+          class="button secondary"
+          aria-label="Exit fullscreen"
+        >
+          EXIT FULLSCREEN
+        </button>
       </section>
       <section class="controls">
         <div class="identity">
           <span class="eyebrow">TRANSMISSION</span
           ><strong>THE CHARACTER SIGNAL</strong
           ><span class="muted" id="status">CONNECTING TO LIVE STREAM…</span>
+          <span class="muted" id="source">CHECKING UDP INPUT…</span>
         </div>
         <div class="actions">
           <select
@@ -38,7 +46,17 @@
             <option>LOADING CHARACTERS…</option></select
           ><button id="play" class="button secondary">
             Ⅱ <span>PAUSE</span></button
-          ><button id="cast" class="button cast">
+          ><button id="mute" class="button secondary" aria-pressed="true">
+            UNMUTE
+          </button>
+          <button
+            id="fullscreen"
+            class="button secondary"
+            aria-label="Enter fullscreen"
+          >
+            FULLSCREEN
+          </button>
+          <button id="cast" class="button cast">
             <span class="cast-icon">▣</span> CAST THIS STREAM
           </button>
         </div>
