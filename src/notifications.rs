@@ -1,4 +1,3 @@
-use crate::open_item::OpenItem;
 use crate::stickers::StickerView;
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{Local, Timelike};
@@ -133,8 +132,8 @@ fn wrap(text: &str, width: f32, size: u16, max_lines: usize) -> Vec<String> {
 /// Draw directly into the encoder target: every media client sees this same feed.
 pub fn draw(
     feed: &SharedFeed,
-    open_item: Option<&OpenItem>,
     stickers: &[StickerView],
+    sticker_layer: &crate::sticker_art::StickerLayer,
     elapsed: f32,
     character_name: &str,
 ) {
@@ -202,8 +201,6 @@ pub fn draw(
     draw_rectangle(476.0, 165.0, 450.0, 2.0, muted);
     draw_rectangle(476.0, 165.0, 450.0 * day_fraction, 2.0, green);
 
-    crate::open_item::draw(open_item, now.timestamp().max(0) as u64);
-
     let uptime = elapsed.max(0.0) as u64;
     let uptime_label = if uptime >= 86400 {
         format!("{}d {:02}h", uptime / 86400, uptime / 3600 % 24)
@@ -240,37 +237,37 @@ pub fn draw(
         ),
     ];
     if entries.is_empty() {
-        crate::stickers::sticker_card(470.0, 278.0, 460.0, 84.0, cards[0].0);
-        crate::stickers::mini_fruit(506.0, 320.0, 24.0, cards[0].1);
+        crate::sticker_art::sticker_card(470.0, 278.0, 460.0, 84.0, cards[0].0);
+        crate::sticker_art::mini_fruit(506.0, 320.0, 24.0, cards[0].1);
         draw_text(
             "ALL QUIET",
             546.0,
             306.0,
             14.0,
-            crate::stickers::muted_ink(),
+            crate::sticker_art::muted_ink(),
         );
         draw_text(
             "Your host is on watch.",
             546.0,
             334.0,
             20.0,
-            crate::stickers::ink(),
+            crate::sticker_art::ink(),
         );
         draw_text(
             "POST /api/notifications",
             546.0,
             352.0,
             13.0,
-            crate::stickers::muted_ink(),
+            crate::sticker_art::muted_ink(),
         );
     }
     for (i, entry) in entries.iter().enumerate() {
         let (fill, fruit) = cards[i % cards.len()];
         let y = 267.0 + i as f32 * 84.0;
-        crate::stickers::sticker_card(470.0, y, 460.0, 76.0, fill);
-        crate::stickers::mini_fruit(504.0, y + 38.0, 21.0, fruit);
+        crate::sticker_art::sticker_card(470.0, y, 460.0, 76.0, fill);
+        crate::sticker_art::mini_fruit(504.0, y + 38.0, 21.0, fruit);
         let title = wrap(&entry.title, 330.0, 17, 1);
-        draw_text(&title[0], 540.0, y + 27.0, 17.0, crate::stickers::ink());
+        draw_text(&title[0], 540.0, y + 27.0, 17.0, crate::sticker_art::ink());
         let age = (now.timestamp().max(0) as u64).saturating_sub(entry.created_at);
         let age_label = if age < 60 {
             "now".to_owned()
@@ -286,7 +283,7 @@ pub fn draw(
             878.0,
             y + 27.0,
             13.0,
-            crate::stickers::muted_ink(),
+            crate::sticker_art::muted_ink(),
         );
         for (j, line) in wrap(&entry.message, 330.0, 15, 2).iter().enumerate() {
             draw_text(
@@ -299,7 +296,7 @@ pub fn draw(
         }
     }
     draw_text("BRONZECAST / LOCAL SIGNAL", 28.0, 522.0, 12.0, muted);
-    crate::stickers::draw(stickers);
+    sticker_layer.draw(stickers);
 }
 
 #[cfg(test)]

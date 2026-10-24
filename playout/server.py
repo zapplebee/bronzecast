@@ -112,9 +112,8 @@ API_PATHS = (
     '/api/notifications',
     '/api/characters',
     '/api/character',
-    '/api/open-item',
-    '/api/timer',
     '/api/stickers',
+    '/api/snapshot',
 )
 
 

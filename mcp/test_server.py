@@ -150,14 +150,12 @@ class MCPTests(unittest.TestCase):
         names = {tool["name"] for tool in listed.json()["result"]["tools"]}
         self.assertIn("bronzecast_switch_character", names)
         self.assertIn("bronzecast_send_notification", names)
-        self.assertIn("bronzecast_set_open_item", names)
-        self.assertIn("bronzecast_clear_open_item", names)
-        self.assertIn("bronzecast_get_timer", names)
-        self.assertIn("bronzecast_set_timer", names)
+        self.assertIn("bronzecast_get_snapshot", names)
         self.assertIn("bronzecast_list_stickers", names)
         self.assertIn("bronzecast_add_sticker", names)
         self.assertIn("bronzecast_update_sticker", names)
         self.assertIn("bronzecast_remove_sticker", names)
+        self.assertFalse(any("open_item" in name or name.endswith("_timer") for name in names))
 
         calls = []
 
@@ -169,30 +167,8 @@ class MCPTests(unittest.TestCase):
                 return {"id": 7, **payload}
             if url.endswith("/api/notifications") and method == "DELETE":
                 return None
-            if url.endswith("/api/open-item") and method == "GET":
-                return {"title": "Ship it", "note": "", "opened_at": 1}
-            if url.endswith("/api/open-item") and method == "PUT":
-                return {**payload, "opened_at": 1}
-            if url.endswith("/api/open-item") and method == "DELETE":
-                return None
-            if url.endswith("/api/timer") and method == "GET":
-                return {
-                    "duration_seconds": 1500,
-                    "remaining_seconds": 1490,
-                    "running": True,
-                    "finished": False,
-                    "state": "running",
-                }
-            if url.endswith("/api/timer") and method == "POST":
-                return {
-                    "duration_seconds": payload.get("duration_seconds", 1500),
-                    "remaining_seconds": payload.get("duration_seconds", 1500),
-                    "running": True,
-                    "finished": False,
-                    "state": "running",
-                }
             if url.endswith("/api/stickers") and method == "GET":
-                return [{"id": 1, "kind": "timer", "x": 28, "y": 24}]
+                return [{"id": 1, "kind": "timer", "x": 28, "y": 24, "angle": 0}]
             if url.endswith("/api/stickers") and method == "POST":
                 return {"id": 2, **payload}
             if "/api/stickers/" in url and method == "PATCH":
@@ -203,7 +179,9 @@ class MCPTests(unittest.TestCase):
                 return {"source": "live"}
             return {}
 
-        with patch("mcp.tools._json", fake_json):
+        with patch("mcp.tools._json", fake_json), patch(
+            "mcp.tools._snapshot_png", return_value=b"fake-png"
+        ):
             status = self.mcp(
                 tokens["access_token"],
                 {"id": 3, "method": "tools/call", "params": {"name": "bronzecast_get_status", "arguments": {}}},
@@ -242,61 +220,10 @@ class MCPTests(unittest.TestCase):
                 },
             )
             self.assertFalse(clear.json()["result"].get("isError", False))
-            pin = self.mcp(
-                tokens["access_token"],
-                {
-                    "id": 7,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "bronzecast_set_open_item",
-                        "arguments": {"title": "Ship it", "note": "Friday"},
-                    },
-                },
-            )
-            self.assertFalse(pin.json()["result"].get("isError", False))
-            read_pin = self.mcp(
-                tokens["access_token"],
-                {
-                    "id": 8,
-                    "method": "tools/call",
-                    "params": {"name": "bronzecast_get_open_item", "arguments": {}},
-                },
-            )
-            self.assertFalse(read_pin.json()["result"].get("isError", False))
-            unpin = self.mcp(
-                tokens["access_token"],
-                {
-                    "id": 9,
-                    "method": "tools/call",
-                    "params": {"name": "bronzecast_clear_open_item", "arguments": {}},
-                },
-            )
-            self.assertFalse(unpin.json()["result"].get("isError", False))
-            set_timer = self.mcp(
-                tokens["access_token"],
-                {
-                    "id": 10,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "bronzecast_set_timer",
-                        "arguments": {"action": "start", "duration_seconds": 1500},
-                    },
-                },
-            )
-            self.assertFalse(set_timer.json()["result"].get("isError", False))
-            read_timer = self.mcp(
-                tokens["access_token"],
-                {
-                    "id": 11,
-                    "method": "tools/call",
-                    "params": {"name": "bronzecast_get_timer", "arguments": {}},
-                },
-            )
-            self.assertFalse(read_timer.json()["result"].get("isError", False))
             add_sticker = self.mcp(
                 tokens["access_token"],
                 {
-                    "id": 12,
+                    "id": 7,
                     "method": "tools/call",
                     "params": {
                         "name": "bronzecast_add_sticker",
@@ -314,7 +241,7 @@ class MCPTests(unittest.TestCase):
             list_stickers = self.mcp(
                 tokens["access_token"],
                 {
-                    "id": 13,
+                    "id": 8,
                     "method": "tools/call",
                     "params": {"name": "bronzecast_list_stickers", "arguments": {}},
                 },
@@ -323,11 +250,11 @@ class MCPTests(unittest.TestCase):
             update_sticker = self.mcp(
                 tokens["access_token"],
                 {
-                    "id": 14,
+                    "id": 9,
                     "method": "tools/call",
                     "params": {
                         "name": "bronzecast_update_sticker",
-                        "arguments": {"id": 2, "x": 500, "y": 400},
+                        "arguments": {"id": 2, "x": 500, "y": 400, "angle": 22.5},
                     },
                 },
             )
@@ -335,7 +262,7 @@ class MCPTests(unittest.TestCase):
             remove_sticker = self.mcp(
                 tokens["access_token"],
                 {
-                    "id": 15,
+                    "id": 10,
                     "method": "tools/call",
                     "params": {
                         "name": "bronzecast_remove_sticker",
@@ -344,6 +271,48 @@ class MCPTests(unittest.TestCase):
                 },
             )
             self.assertFalse(remove_sticker.json()["result"].get("isError", False))
+            note_sticker = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 12,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "bronzecast_add_sticker",
+                        "arguments": {
+                            "kind": "note",
+                            "angle": -12,
+                            "title": "Plan",
+                            "text": "A movable note",
+                        },
+                    },
+                },
+            )
+            self.assertFalse(note_sticker.json()["result"].get("isError", False))
+            timer_action = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 13,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "bronzecast_update_sticker",
+                        "arguments": {"id": 1, "action": "set", "duration_seconds": 900},
+                    },
+                },
+            )
+            self.assertFalse(timer_action.json()["result"].get("isError", False))
+            snapshot = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 11,
+                    "method": "tools/call",
+                    "params": {"name": "bronzecast_get_snapshot", "arguments": {}},
+                },
+            )
+            self.assertFalse(snapshot.json()["result"].get("isError", False))
+            image_content = snapshot.json()["result"]["content"][0]
+            self.assertEqual(image_content["type"], "image")
+            self.assertEqual(image_content["mimeType"], "image/png")
+            self.assertEqual(base64.b64decode(image_content["data"]), b"fake-png")
         self.assertIn(
             ("POST", "http://generator.test/api/character", {"id": "chocobo"}), calls
         )
@@ -357,30 +326,13 @@ class MCPTests(unittest.TestCase):
         )
         self.assertIn(
             (
-                "PUT",
-                "http://generator.test/api/open-item",
-                {"title": "Ship it", "note": "Friday"},
-            ),
-            calls,
-        )
-        self.assertIn(
-            (
-                "POST",
-                "http://generator.test/api/timer",
-                {"action": "start", "duration_seconds": 1500},
-            ),
-            calls,
-        )
-        self.assertIn(("GET", "http://generator.test/api/timer", None), calls)
-        self.assertIn(
-            (
                 "POST",
                 "http://generator.test/api/stickers",
                 {
                     "kind": "countdown",
+                    "text": "til Halloween",
                     "x": 476,
                     "y": 380,
-                    "text": "til Halloween",
                     "target": "2026-10-31",
                 },
             ),
@@ -388,10 +340,26 @@ class MCPTests(unittest.TestCase):
         )
         self.assertIn(("GET", "http://generator.test/api/stickers", None), calls)
         self.assertIn(
-            ("PATCH", "http://generator.test/api/stickers/2", {"x": 500, "y": 400}),
+            ("PATCH", "http://generator.test/api/stickers/2", {"x": 500, "y": 400, "angle": 22.5}),
             calls,
         )
         self.assertIn(("DELETE", "http://generator.test/api/stickers/2", None), calls)
+        self.assertIn(
+            (
+                "POST",
+                "http://generator.test/api/stickers",
+                {"kind": "note", "angle": -12, "title": "Plan", "text": "A movable note"},
+            ),
+            calls,
+        )
+        self.assertIn(
+            (
+                "PATCH",
+                "http://generator.test/api/stickers/1",
+                {"action": "set", "duration_seconds": 900},
+            ),
+            calls,
+        )
 
     def test_sticker_validation(self):
         _, tokens = self.tokens()
@@ -401,7 +369,8 @@ class MCPTests(unittest.TestCase):
             ("bronzecast_add_sticker", {"kind": "timer", "x": 1, "y": 1, "target": "2026-10-31"}),
             ("bronzecast_add_sticker", {"kind": "reminder", "x": 1, "y": 1, "text": "x", "done": True}),
             ("bronzecast_add_sticker", {"kind": "todo", "x": 1, "y": 1, "text": "x", "duration_seconds": 60}),
-            ("bronzecast_add_sticker", {"kind": "note", "x": 1, "y": 1, "text": "x"}),
+            ("bronzecast_add_sticker", {"kind": "note"}),
+            ("bronzecast_add_sticker", {"kind": "note", "title": "", "text": "  "}),
             ("bronzecast_add_sticker", {"kind": "reminder", "x": 961, "y": 1, "text": "x"}),
             ("bronzecast_update_sticker", {"id": 0, "x": 1}),
             ("bronzecast_update_sticker", {"id": 1}),
@@ -420,22 +389,24 @@ class MCPTests(unittest.TestCase):
             )
             self.assertTrue(response.json()["result"]["isError"], (name, arguments))
 
-    def test_timer_validation(self):
+    def test_timer_sticker_validation(self):
         _, tokens = self.tokens()
         for arguments in (
-            {"action": "dance"},
-            {"action": "set"},
-            {"action": "start", "duration_seconds": 0},
-            {"action": "start", "duration_seconds": 3601},
-            {"action": "start", "duration_seconds": True},
+            {"kind": "timer", "duration_seconds": 0},
+            {"kind": "timer", "duration_seconds": 3601},
+            {"kind": "timer", "duration_seconds": True},
+            {"id": 1, "action": "dance"},
+            {"id": 1, "action": "set"},
+            {"id": 1, "action": "start", "duration_seconds": 60},
         ):
+            tool_name = "bronzecast_add_sticker" if "kind" in arguments else "bronzecast_update_sticker"
             response = self.mcp(
                 tokens["access_token"],
                 {
                     "id": 1,
                     "method": "tools/call",
                     "params": {
-                        "name": "bronzecast_set_timer",
+                        "name": tool_name,
                         "arguments": arguments,
                     },
                 },
@@ -677,6 +648,23 @@ class MCPTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["result"]["isError"])
 
+    def test_snapshot_is_read_scope_image_content(self):
+        _, tokens = self.tokens(scope="bronzecast.read")
+        png = b"\x89PNG\r\n\x1a\nboard"
+        with patch("mcp.tools._snapshot_png", return_value=png):
+            response = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "bronzecast_get_snapshot", "arguments": {}},
+                },
+            )
+        content = response.json()["result"]["content"][0]
+        self.assertEqual(content["type"], "image")
+        self.assertEqual(content["mimeType"], "image/png")
+        self.assertEqual(base64.b64decode(content["data"]), png)
+
     def test_resources_read_snapshot(self):
         _, tokens = self.tokens()
 
@@ -685,8 +673,8 @@ class MCPTests(unittest.TestCase):
                 return {"active_id": "mog"}
             if url.endswith("/api/notifications"):
                 return []
-            if url.endswith("/api/timer"):
-                return {"state": "running", "remaining_seconds": 1490}
+            if url.endswith("/api/stickers"):
+                return [{"kind": "timer", "state": "running", "remaining_seconds": 1490}]
             return {"source": "live"}
 
         with patch("mcp.tools._json", fake_json):

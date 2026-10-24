@@ -8,6 +8,11 @@ through DCR or CIMD without any manual client provisioning.
 The service never renders. It proxies reads and writes to the generator's
 control API and reads the playout encoder health, exactly like the web page.
 
+Sticker unification is implemented: the tool list below uses generic sticker
+operations and includes a rendered-board snapshot. The planned notification
+visual change in [`PLAN_GREEN_NOTIFICATIONS.md`](PLAN_GREEN_NOTIFICATIONS.md) is
+separate and does not change these tools.
+
 ```
 MCP client ──HTTPS──> Traefik ──> mcp:8090 ──HTTP──> generator:8081
                           │                    └──> playout:8080/health
@@ -65,41 +70,38 @@ must be `none`, and PKCE with `S256` is mandatory. There are no client secrets.
 
 | Tool | Scope | Effect |
 | --- | --- | --- |
-| `bronzecast_get_status` | read | Character, open item, stickers, notifications, and stream health in one call. |
+| `bronzecast_get_status` | read | Character, stickers, notifications, and stream health in one call. |
+| `bronzecast_get_snapshot` | read | Latest complete 960×540 renderer frame as MCP `image/png` content. |
 | `bronzecast_list_characters` | read | Available characters plus active/requested ids. |
 | `bronzecast_switch_character` | write | `{id}`; applied on the next rendered frame. |
 | `bronzecast_list_notifications` | read | Current notification queue. |
 | `bronzecast_send_notification` | write | `{title?, message}`; 48/320 character limits. |
 | `bronzecast_clear_notifications` | write | Removes every notification. |
-| `bronzecast_get_open_item` | read | The persistent reminder, or `null`. |
-| `bronzecast_set_open_item` | write | `{title, note?}`; 48/160 character limits. |
-| `bronzecast_clear_open_item` | write | Removes the persistent reminder. |
 | `bronzecast_list_stickers` | read | Every persistent sticker and its computed state. |
-| `bronzecast_add_sticker` | write | `{kind, x, y, text?, target?, duration_seconds?, done?}`. |
-| `bronzecast_update_sticker` | write | `{id, x?, y?, text?, target?, done?, action?, duration_seconds?}`. |
+| `bronzecast_add_sticker` | write | `{kind, x?, y?, angle?, title?, text?, target?, duration_seconds?, done?}`. |
+| `bronzecast_update_sticker` | write | `{id, x?, y?, angle?, title?, text?, target?, done?, action?, duration_seconds?}`. |
 | `bronzecast_remove_sticker` | write | `{id}`; deletes the sticker. |
-| `bronzecast_get_timer` | read | Tomato timer sticker duration, remaining, and state. |
-| `bronzecast_set_timer` | write | `{action, duration_seconds?, x?, y?}`; start, pause, reset, or set. |
 | `bronzecast_stream_status` | read | Playout source, frame age, encoder state. |
 
-The open item is the anti-notification: one persistent reminder, shown as a
-dashboard card with the title at the bottom. It lives on the renderer, not in this
-service, and is written to `BRONZECAST_STATE_DIR` (default `state/`) so it
-survives renderer restarts. Setting the same title again keeps the original
-`opened_at`; changing the title starts a new age.
+Stickers are persistent, movable and rotatable cards rendered into the video.
+They live in versioned `stickers.json` under `BRONZECAST_STATE_DIR` and survive
+renderer restarts. `kind` is `timer`, `countdown`, `todo`, or `note`. Coordinates
+are unrotated top-left positions in the 960×540 board coordinate space; `angle`
+is clockwise degrees around the sticker center. The renderer clamps rotated
+visual bounds to the canvas. Coordinates default by kind when omitted.
 
-Stickers are persistent, positionable cards rendered into the video. They live
-in `stickers.json` under `BRONZECAST_STATE_DIR` and survive renderer restarts.
-`kind` is `countdown`, `timer`, `reminder`, or `todo`; positions use the
-960×540 board coordinate space and are clamped on-screen. Countdowns require a
-`YYYY-MM-DD` target and update automatically; reminders are plain text; todos
-accept `done`; timers accept `action` (`start`, `pause`, `reset`, or `set`) and
-an optional `duration_seconds` (1–3600). `set` requires a duration.
+Countdowns require a `YYYY-MM-DD` target and update automatically; todos have a
+completion flag; notes have a title and/or body with no completion state. Timers
+are identified by sticker ID and accept `action` (`start`, `pause`, `reset`, or
+`set`) through `bronzecast_update_sticker`; `set` requires a duration from 1–3600
+seconds. No open-item/timer aliases or runtime state migrations are present.
 
-The tomato timer is a sticker seeded at the top-left of the character frame and
-defaults to 25 minutes. `get_timer`/`set_timer` are compatibility aliases that
-read or update the first timer sticker. Legacy `timer.json` state is migrated
-when no `stickers.json` exists.
+`bronzecast_get_snapshot` returns the latest complete 960×540 renderer frame as
+a standard MCP image content item containing base64 PNG data. It includes the
+character, dashboard, notifications, and stickers—not the playout fallback card.
+Agents can pair it with `bronzecast_list_stickers`, adjust `x`, `y`, or `angle`,
+and inspect a fresh snapshot. Before the renderer publishes its first frame, the
+tool reports that the snapshot is unavailable.
 
 Resource: `bronzecast://dashboard/state` returns the same snapshot as
 `bronzecast_get_status`.

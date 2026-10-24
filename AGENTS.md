@@ -25,12 +25,28 @@ Run `cargo test --locked` and `cargo build --release --locked`. Verify a switch 
   thread. Models share lighting, animation, shadows, and the notification layout.
 - The character stays left; clock/dashboard/notifications stay right. Notifications
   are baked into the video, not a browser-only overlay. Notifications are ephemeral
-  and in-memory; the open item and stickers (including the tomato timer) are
-  persistent state under `BRONZECAST_STATE_DIR` (default `state/`) and must
-  survive renderer restarts. Stickers may be placed anywhere; the timer defaults
-  to the top-left of the character frame, so keep the character header beside it.
+  and in-memory; all durable board content is one sticker domain under
+  `BRONZECAST_STATE_DIR` (default `state/stickers.json`) and must survive renderer
+  restarts. Stickers may be placed anywhere and rotated with `angle`; the timer
+  defaults to the top-left of the character frame, so keep the character header
+  beside it.
 - Preserve user-supplied source assets in `scratch/` and the original asset folders.
 - Light falloff uses horizontal-only coverage dithering, with different treatment
   for floor/model. Avoid fake dead pixels, vertical grids, or row displacement.
 - Restart loses in-memory notifications/selection. Preserve wanted message contents
   before a restart and restore them; switches should not require restarting.
+
+## Sticker and notification contract
+
+[`docs/PLAN_UNIFY_STICKERS.md`](docs/PLAN_UNIFY_STICKERS.md) records the implemented
+sticker contract: one persistent domain (`timer`, `countdown`, `todo`, `note`),
+generic CRUD/API/MCP tools, arbitrary coordinates and rotation, and a read-only
+MCP snapshot image. Do not reintroduce the fixed open item, separate timer API,
+`reminder` kind, aliases, or runtime migrations.
+
+The upper-right area must remain empty unless a user creates a note—do not create
+one automatically. Notifications remain ephemeral and currently use fruit-card
+rendering. Before changing their visuals, read
+[`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md), which is
+still a plan; update the renderer, tests, README, and API docs together when
+implementing it.

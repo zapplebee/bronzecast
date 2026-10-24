@@ -1,5 +1,6 @@
 """MCP tool definitions and dispatch onto the renderer/playout HTTP APIs."""
 import asyncio
+import base64
 import datetime
 import json
 import math
@@ -10,7 +11,7 @@ import httpx
 TIMEOUT = 5.0
 CHARACTER_ID_RE = re.compile(r"^[^\s\x00-\x1f\x7f]{1,64}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-STICKER_KINDS = {"countdown", "timer", "reminder", "todo"}
+STICKER_KINDS = {"countdown", "timer", "todo", "note"}
 
 
 class ToolError(Exception):
@@ -22,8 +23,28 @@ TOOLS = [
         "name": "bronzecast_get_status",
         "title": "Get dashboard status",
         "description": (
-            "Read the active character, persistent open item, stickers, "
-            "notification queue, and live playout encoder state in one call."
+            "Read the active character, persistent stickers, notification queue, "
+            "and live playout encoder state in one call."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        "annotations": {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    },
+    {
+        "name": "bronzecast_get_snapshot",
+        "title": "Get rendered board snapshot",
+        "description": (
+            "Return the latest complete 960x540 renderer frame as a PNG image. "
+            "Use it with bronzecast_list_stickers to inspect placement, then "
+            "adjust sticker x, y, or angle and request another snapshot."
         ),
         "inputSchema": {
             "type": "object",
@@ -146,133 +167,11 @@ TOOLS = [
         },
     },
     {
-        "name": "bronzecast_get_open_item",
-        "title": "Get open item",
-        "description": (
-            "Read the persistent reminder pinned to the dashboard. Returns null "
-            "when nothing is open."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-        "annotations": {
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": False,
-        },
-    },
-    {
-        "name": "bronzecast_set_open_item",
-        "title": "Pin open item",
-        "description": (
-            "Pin a persistent reminder card to the live video, like a string on "
-            "a finger. Unlike notifications it stays until cleared and survives "
-            "renderer restarts. The title appears at the bottom of the tag; the "
-            "optional note fills the body. Titles are limited to 48 characters "
-            "and notes to 160; only note newlines are allowed as control "
-            "characters."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string",
-                    "description": "The thing to remember; appears at the bottom.",
-                    "maxLength": 48,
-                },
-                "note": {
-                    "type": "string",
-                    "description": "Optional detail, up to 160 characters.",
-                    "maxLength": 160,
-                },
-            },
-            "required": ["title"],
-            "additionalProperties": False,
-        },
-        "annotations": {
-            "readOnlyHint": False,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": False,
-        },
-    },
-    {
-        "name": "bronzecast_clear_open_item",
-        "title": "Clear open item",
-        "description": "Remove the persistent open item from the dashboard.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-        "annotations": {
-            "readOnlyHint": False,
-            "destructiveHint": True,
-            "idempotentHint": True,
-            "openWorldHint": False,
-        },
-    },
-    {
-        "name": "bronzecast_get_timer",
-        "title": "Get tomato timer",
-        "description": (
-            "Read the tomato focus timer's duration, remaining seconds, and "
-            "state (ready, running, paused, or done)."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-        "annotations": {
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": False,
-        },
-    },
-    {
-        "name": "bronzecast_set_timer",
-        "title": "Set tomato timer",
-        "description": (
-            "Start, pause, reset, or set the tomato focus timer. "
-            "duration_seconds is 1–3600 and resets the timer when provided; "
-            "action 'set' requires it."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": ["start", "pause", "reset", "set"],
-                    "description": "Timer action.",
-                },
-                "duration_seconds": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 3600,
-                    "description": "Optional new duration; resets the timer.",
-                },
-            },
-            "required": ["action"],
-            "additionalProperties": False,
-        },
-        "annotations": {
-            "readOnlyHint": False,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": False,
-        },
-    },
-    {
         "name": "bronzecast_list_stickers",
         "title": "List stickers",
         "description": (
             "Read every persistent sticker on the video board, including "
-            "countdowns, tomato timers, reminders, and todos."
+            "countdowns, tomato timers, todos, and notes."
         ),
         "inputSchema": {
             "type": "object",
@@ -290,33 +189,43 @@ TOOLS = [
         "name": "bronzecast_add_sticker",
         "title": "Add sticker",
         "description": (
-            "Place a persistent sticker at board coordinates. Countdowns need a "
-            "YYYY-MM-DD target; timers accept an optional duration; todos accept "
-            "done; reminders are plain text. Stickers survive renderer restarts."
+            "Place a persistent sticker anywhere on the board. x and y default "
+            "by kind; angle is optional clockwise degrees. Use todo for "
+            "completable tasks and note for information to keep visible. "
+            "Countdowns need a YYYY-MM-DD target; timer duration is optional."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "kind": {
                     "type": "string",
-                    "enum": ["countdown", "timer", "reminder", "todo"],
+                    "enum": ["countdown", "timer", "todo", "note"],
                 },
                 "x": {
                     "type": "number",
                     "minimum": 0,
                     "maximum": 960,
-                    "description": "Left edge in board pixels.",
+                    "description": "Unrotated top-left x in board pixels; defaults by kind.",
                 },
                 "y": {
                     "type": "number",
                     "minimum": 0,
                     "maximum": 540,
-                    "description": "Top edge in board pixels.",
+                    "description": "Unrotated top-left y in board pixels; defaults by kind.",
+                },
+                "angle": {
+                    "type": "number",
+                    "description": "Clockwise degrees around sticker center; defaults to 0.",
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 48,
+                    "description": "Optional note title; note requires title or text.",
                 },
                 "text": {
                     "type": "string",
                     "maxLength": 160,
-                    "description": "Label or body; required except for timer.",
+                    "description": "Text for countdown, todo, or note; required except for timer and note.",
                 },
                 "target": {
                     "type": "string",
@@ -333,7 +242,7 @@ TOOLS = [
                     "description": "Initial todo completion state.",
                 },
             },
-            "required": ["kind", "x", "y"],
+            "required": ["kind"],
             "additionalProperties": False,
         },
         "annotations": {
@@ -347,9 +256,10 @@ TOOLS = [
         "name": "bronzecast_update_sticker",
         "title": "Update sticker",
         "description": (
-            "Move or edit a sticker. Timers accept action (start, pause, reset, "
-            "set) and duration_seconds; countdowns accept a new target; todos "
-            "accept done."
+            "Move, rotate, or edit a sticker. x and y are unrotated top-left "
+            "board coordinates; angle is clockwise degrees. Timers accept "
+            "action (start, pause, reset, set); countdowns accept target; "
+            "todos accept done; notes accept title and text."
         ),
         "inputSchema": {
             "type": "object",
@@ -361,6 +271,8 @@ TOOLS = [
                 },
                 "x": {"type": "number", "minimum": 0, "maximum": 960},
                 "y": {"type": "number", "minimum": 0, "maximum": 540},
+                "angle": {"type": "number", "description": "Clockwise degrees around sticker center."},
+                "title": {"type": "string", "maxLength": 48},
                 "text": {"type": "string", "maxLength": 160},
                 "target": {
                     "type": "string",
@@ -435,9 +347,6 @@ WRITE_TOOLS = {
     "bronzecast_switch_character",
     "bronzecast_send_notification",
     "bronzecast_clear_notifications",
-    "bronzecast_set_open_item",
-    "bronzecast_clear_open_item",
-    "bronzecast_set_timer",
     "bronzecast_add_sticker",
     "bronzecast_update_sticker",
     "bronzecast_remove_sticker",
@@ -461,6 +370,25 @@ async def _json(method, url, payload=None):
         return response.json()
     except ValueError:
         return {"text": response.text}
+
+
+async def _snapshot_png(url):
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            response = await client.get(url)
+    except httpx.HTTPError as error:
+        raise ToolError(f"BRONZECAST snapshot unavailable: {error}") from error
+    if response.status_code >= 400:
+        detail = response.text.strip()[:500]
+        raise ToolError(
+            f"GET {url} returned HTTP {response.status_code}: {detail}"
+        )
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].strip()
+    if content_type != "image/png":
+        raise ToolError(f"snapshot returned unexpected content type: {content_type or 'missing'}")
+    if not response.content:
+        raise ToolError("snapshot response was empty")
+    return response.content
 
 
 def _control(char):
@@ -489,44 +417,6 @@ def _validate_notification(arguments):
     return {"title": title, "message": message}
 
 
-def _validate_open_item(arguments):
-    title = arguments.get("title")
-    note = arguments.get("note", "")
-    if not isinstance(title, str) or not isinstance(note, str):
-        raise ToolError("title and note must be strings")
-    title = title.strip()
-    note = note.strip()
-    if not title:
-        raise ToolError("title must not be empty")
-    if len(title) > 48:
-        raise ToolError("title must be 48 characters or fewer")
-    if len(note) > 160:
-        raise ToolError("note must be 160 characters or fewer")
-    if any(_control(char) for char in title):
-        raise ToolError("title must not contain control characters")
-    if any(char != "\n" and _control(char) for char in note):
-        raise ToolError("note only allows newlines as control characters")
-    return {"title": title, "note": note}
-
-
-def _validate_timer(arguments):
-    action = arguments.get("action")
-    if action not in {"start", "pause", "reset", "set"}:
-        raise ToolError("action must be start, pause, reset, or set")
-    duration = arguments.get("duration_seconds")
-    if duration is not None:
-        if isinstance(duration, bool) or not isinstance(duration, int):
-            raise ToolError("duration_seconds must be an integer")
-        if not 1 <= duration <= 3600:
-            raise ToolError("duration_seconds must be between 1 and 3600")
-    if action == "set" and duration is None:
-        raise ToolError("action 'set' requires duration_seconds")
-    payload = {"action": action}
-    if duration is not None:
-        payload["duration_seconds"] = duration
-    return payload
-
-
 def _sticker_id(arguments):
     value = arguments.get("id")
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -540,6 +430,14 @@ def _coordinate(arguments, name, maximum):
         raise ToolError(f"{name} must be a number")
     if not math.isfinite(value) or not 0 <= value <= maximum:
         raise ToolError(f"{name} must be between 0 and {maximum}")
+    return value
+
+
+def _angle(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ToolError("angle must be a number")
+    if not math.isfinite(value):
+        raise ToolError("angle must be finite")
     return value
 
 
@@ -581,28 +479,58 @@ def _sticker_date(value):
 
 
 def _validate_sticker_add(arguments):
+    unknown = set(arguments) - {
+        "kind", "x", "y", "angle", "title", "text", "target",
+        "duration_seconds", "done",
+    }
+    if unknown:
+        raise ToolError(f"unknown sticker field: {sorted(unknown)[0]}")
     kind = arguments.get("kind")
     if kind not in STICKER_KINDS:
-        raise ToolError("kind must be countdown, timer, reminder, or todo")
-    payload = {
-        "kind": kind,
-        "x": _coordinate(arguments, "x", 960),
-        "y": _coordinate(arguments, "y", 540),
-    }
-    text = _sticker_text(arguments.get("text"), required=kind != "timer")
-    if text or kind == "timer":
-        payload["text"] = text
+        raise ToolError("kind must be countdown, timer, todo, or note")
+    payload = {"kind": kind}
+    for name, maximum in (("x", 960), ("y", 540)):
+        if name in arguments:
+            payload[name] = _coordinate(arguments, name, maximum)
+    if "angle" in arguments:
+        payload["angle"] = _angle(arguments["angle"])
+    if "title" in arguments:
+        payload["title"] = _sticker_text(
+            arguments["title"], name="title", maximum=48, required=False
+        )
+    if "text" in arguments or kind in {"countdown", "todo"}:
+        payload["text"] = _sticker_text(
+            arguments.get("text"),
+            required=kind in {"countdown", "todo"},
+            newlines=kind in {"todo", "note"},
+        )
     target = arguments.get("target")
     duration = arguments.get("duration_seconds")
-    done = arguments.get("done", False)
-    if not isinstance(done, bool):
-        raise ToolError("done must be a boolean")
+    done = arguments.get("done")
     if target is not None and kind != "countdown":
         raise ToolError("target only applies to countdown stickers")
     if duration is not None and kind != "timer":
         raise ToolError("duration_seconds only applies to timer stickers")
-    if done and kind != "todo":
+    if done is not None and kind != "todo":
         raise ToolError("done only applies to todo stickers")
+    if done is not None and not isinstance(done, bool):
+        raise ToolError("done must be a boolean")
+    if kind == "timer" and any(
+        name in arguments for name in ("title", "text", "target", "done")
+    ):
+        raise ToolError("timer accepts only duration_seconds in addition to position and angle")
+    if kind == "countdown" and any(
+        name in arguments for name in ("title", "duration_seconds", "done")
+    ):
+        raise ToolError("countdown does not accept title, duration_seconds, or done")
+    if kind == "todo" and any(
+        name in arguments for name in ("title", "target", "duration_seconds")
+    ):
+        raise ToolError("todo does not accept title, target, or duration_seconds")
+    if kind == "note" and any(
+        name in arguments for name in ("target", "duration_seconds", "done")
+    ):
+        raise ToolError("note does not accept target, duration_seconds, or done")
     if kind == "countdown":
         if target is None:
             raise ToolError("countdown requires target (YYYY-MM-DD)")
@@ -610,18 +538,34 @@ def _validate_sticker_add(arguments):
     elif kind == "timer" and duration is not None:
         payload["duration_seconds"] = _sticker_duration(duration)
     elif kind == "todo":
-        payload["done"] = done
+        if done is not None:
+            payload["done"] = done
+    elif kind == "note":
+        if not payload.get("title", "").strip() and not payload.get("text", "").strip():
+            raise ToolError("note requires a non-empty title or text")
     return payload
 
 
 def _validate_sticker_update(arguments):
+    unknown = set(arguments) - {
+        "id", "x", "y", "angle", "title", "text", "target", "done",
+        "action", "duration_seconds",
+    }
+    if unknown:
+        raise ToolError(f"unknown sticker field: {sorted(unknown)[0]}")
     payload = {}
     for name, maximum in (("x", 960), ("y", 540)):
         if name in arguments:
             payload[name] = _coordinate(arguments, name, maximum)
+    if "angle" in arguments:
+        payload["angle"] = _angle(arguments["angle"])
+    if "title" in arguments:
+        payload["title"] = _sticker_text(
+            arguments["title"], name="title", maximum=48, required=False
+        )
     if "text" in arguments:
         payload["text"] = _sticker_text(
-            arguments["text"], required=True, newlines=True
+            arguments["text"], required=False, newlines=True
         )
     if "target" in arguments:
         payload["target"] = _sticker_date(arguments["target"])
@@ -637,6 +581,8 @@ def _validate_sticker_update(arguments):
         payload["duration_seconds"] = _sticker_duration(
             arguments["duration_seconds"]
         )
+    if "duration_seconds" in payload and payload.get("action") != "set":
+        raise ToolError("duration_seconds is writable only with action 'set'")
     if payload.get("action") == "set" and "duration_seconds" not in payload:
         raise ToolError("action 'set' requires duration_seconds")
     if not payload:
@@ -649,12 +595,10 @@ def _text(value):
 
 
 async def _status_payload(settings):
-    character, notifications, open_item, stickers, timer, stream = await asyncio.gather(
+    character, notifications, stickers, stream = await asyncio.gather(
         _json("GET", settings.generator_url + "/api/character"),
         _json("GET", settings.generator_url + "/api/notifications"),
-        _json("GET", settings.generator_url + "/api/open-item"),
         _json("GET", settings.generator_url + "/api/stickers"),
-        _json("GET", settings.generator_url + "/api/timer"),
         _json("GET", settings.playout_url + "/health"),
         return_exceptions=True,
     )
@@ -662,15 +606,11 @@ async def _status_payload(settings):
     for key, value in (
         ("character", character),
         ("notifications", notifications),
-        ("open_item", open_item),
         ("stickers", stickers),
-        ("timer", timer),
         ("stream", stream),
     ):
         payload[key] = {"error": str(value)} if isinstance(value, Exception) else value
-    core_failed = isinstance(character, Exception) and isinstance(
-        notifications, Exception
-    )
+    core_failed = isinstance(character, Exception) and isinstance(notifications, Exception)
     return payload, core_failed
 
 
@@ -679,28 +619,22 @@ async def call_tool(name, arguments, settings):
         payload, failed = await _status_payload(settings)
         return {"content": [{"type": "text", "text": _text(payload)}], "isError": failed}
 
-    if name == "bronzecast_list_characters":
-        return {"content": [{"type": "text", "text": _text(await _json("GET", settings.generator_url + "/api/character"))}]}
-
-    if name == "bronzecast_get_timer":
+    if name == "bronzecast_get_snapshot":
+        if arguments:
+            raise ToolError("bronzecast_get_snapshot does not accept arguments")
+        png = await _snapshot_png(settings.generator_url + "/api/snapshot")
         return {
             "content": [
                 {
-                    "type": "text",
-                    "text": _text(
-                        await _json("GET", settings.generator_url + "/api/timer")
-                    ),
+                    "type": "image",
+                    "data": base64.b64encode(png).decode("ascii"),
+                    "mimeType": "image/png",
                 }
             ]
         }
 
-    if name == "bronzecast_set_timer":
-        result = await _json(
-            "POST",
-            settings.generator_url + "/api/timer",
-            _validate_timer(arguments),
-        )
-        return {"content": [{"type": "text", "text": _text(result)}]}
+    if name == "bronzecast_list_characters":
+        return {"content": [{"type": "text", "text": _text(await _json("GET", settings.generator_url + "/api/character"))}]}
 
     if name == "bronzecast_list_stickers":
         return {
@@ -767,31 +701,5 @@ async def call_tool(name, arguments, settings):
     if name == "bronzecast_clear_notifications":
         await _json("DELETE", settings.generator_url + "/api/notifications")
         return {"content": [{"type": "text", "text": "All notifications cleared."}]}
-
-    if name == "bronzecast_get_open_item":
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": _text(
-                        await _json(
-                            "GET", settings.generator_url + "/api/open-item"
-                        )
-                    ),
-                }
-            ]
-        }
-
-    if name == "bronzecast_set_open_item":
-        result = await _json(
-            "PUT",
-            settings.generator_url + "/api/open-item",
-            _validate_open_item(arguments),
-        )
-        return {"content": [{"type": "text", "text": _text(result)}]}
-
-    if name == "bronzecast_clear_open_item":
-        await _json("DELETE", settings.generator_url + "/api/open-item")
-        return {"content": [{"type": "text", "text": "Open item cleared."}]}
 
     raise ToolError(f"Unknown tool: {name}")

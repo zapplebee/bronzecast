@@ -1,7 +1,8 @@
 use macroquad::prelude::*;
 mod characters;
 mod notifications;
-mod open_item;
+mod snapshot;
+mod sticker_art;
 mod stickers;
 use std::{
     io::Write,
@@ -143,8 +144,8 @@ fn start_sender() -> Result<(Child, ChildStdin), String> {
 fn start_control_server(
     feed: notifications::SharedFeed,
     selection: characters::SharedSelection,
-    open_item: open_item::SharedOpenItem,
     sticker_store: stickers::SharedStickers,
+    snapshot_cache: snapshot::SharedSnapshot,
 ) {
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -163,8 +164,8 @@ fn start_control_server(
                 )
                 .with_state(feed)
                 .merge(characters::routes(selection))
-                .merge(open_item::routes(open_item))
-                .merge(stickers::routes(sticker_store));
+                .merge(stickers::routes(sticker_store))
+                .merge(snapshot::routes(snapshot_cache));
             let address =
                 std::env::var("BRONZECAST_CONTROL_ADDR").unwrap_or_else(|_| "0.0.0.0:8081".into());
             let listener = tokio::net::TcpListener::bind(&address)
@@ -291,13 +292,20 @@ async fn main() {
     };
     let feed = notifications::SharedFeed::default();
     let state_dir = std::env::var("BRONZECAST_STATE_DIR").unwrap_or_else(|_| "state".into());
-    let open_item = open_item::Store::load(&state_dir);
-    let sticker_store = stickers::Store::load(&state_dir);
+    let sticker_store = match stickers::Store::load(&state_dir) {
+        Ok(store) => store,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
+    let snapshot_cache = snapshot::shared();
+    let sticker_layer = sticker_art::StickerLayer::new();
     start_control_server(
         feed.clone(),
         selection.clone(),
-        open_item.clone(),
         sticker_store.clone(),
+        snapshot_cache.clone(),
     );
     let started = get_time() as f32;
     let mut frame = 0u64;
@@ -406,12 +414,11 @@ async fn main() {
             },
         );
         gl_use_default_material();
-        let pinned = open_item.snapshot();
         let sticker_views = sticker_store.snapshot();
         notifications::draw(
             &feed,
-            pinned.as_ref(),
             &sticker_views,
+            &sticker_layer,
             t,
             &character.spec.name,
         );
@@ -442,6 +449,7 @@ async fn main() {
         next_frame().await;
         if t >= next_encode_at {
             let image = output_target.texture.get_texture_data();
+            snapshot::publish(&snapshot_cache, image.bytes.clone());
             if let Err(error) = input.write_all(&image.bytes) {
                 eprintln!("ffmpeg stream ended: {error}");
                 break;

@@ -57,6 +57,9 @@ cards on the right; long text is wrapped and visually truncated, while the API
 retains the full message. The green box above the character shows the newest
 title. Notifications are drawn **into the encoded video**, not just the web UI,
 so the browser and Hub both receive them, with several seconds of HLS delay.
+The current notification cards use fruit styling; the planned return to green
+boxes is tracked separately in
+[`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md).
 
 The public API is proxied to the renderer on port 8081. When the renderer is
 offline, character/notification APIs return 503 while the test-card video keeps
@@ -65,17 +68,25 @@ playing. `GET /api/stream` remains available and reports live/fallback input sta
 ## Stickers and tomato timer
 
 Persistent stickers can be placed anywhere on the 960×540 video board. The
-renderer supports auto-updating countdowns, a tomato timer, plain reminders, and
-todos. They are stored in `state/stickers.json`, so they survive renderer
-restarts; the default tomato timer is seeded at the top-left of the character
-frame.
+renderer supports auto-updating countdowns, tomato timers, todos, and notes.
+They are stored as kind-specific records in versioned `state/stickers.json` and
+survive renderer restarts; a missing store seeds one 25-minute tomato timer at the
+top-left of the character frame. There is no fixed open-item panel or separate
+timer API.
+
+`x`/`y` are the unrotated top-left in board pixels. `angle` is optional clockwise
+degrees around the sticker center (default `0`). The renderer clamps the rotated
+sticker, including its shadow, onto the board. Coordinates are optional on create
+and use kind-specific defaults. No collision avoidance is performed.
+The canonical data/action contract for API and MCP agents is documented in
+[`docs/PLAN_UNIFY_STICKERS.md`](docs/PLAN_UNIFY_STICKERS.md).
 
 ```sh
 curl http://localhost:8080/api/stickers
 
 curl -X POST http://localhost:8080/api/stickers \
   -H 'Content-Type: application/json' \
-  -d '{"kind":"countdown","x":476,"y":380,"text":"til Halloween","target":"2026-10-31"}'
+  -d '{"kind":"countdown","x":476,"y":380,"angle":-8,"text":"til Halloween","target":"2026-10-31"}'
 
 curl -X PATCH http://localhost:8080/api/stickers/2 \
   -H 'Content-Type: application/json' \
@@ -84,17 +95,18 @@ curl -X PATCH http://localhost:8080/api/stickers/2 \
 curl -X DELETE http://localhost:8080/api/stickers/2
 ```
 
-`POST /api/stickers` requires `kind` (`countdown`, `timer`, `reminder`, or
-`todo`), `x`, and `y`. Countdowns require `text` and a `YYYY-MM-DD` `target`;
-timers accept optional `duration_seconds` (1–3600); todos accept `done`.
-`PATCH` accepts `x`, `y`, `text`, `target`, `done`, and, for timers, `action`
-(`start`, `pause`, `reset`, or `set`) plus `duration_seconds`. `set` requires a
-duration.
+`POST /api/stickers` requires `kind` (`countdown`, `timer`, `todo`, or `note`).
+Countdowns require `text` and a `YYYY-MM-DD` `target`; timers accept optional
+`duration_seconds` (1–3600); todos require `text` and accept `done`; notes require
+at least one of `title` (up to 48 characters) or `text` (up to 160). `PATCH`
+accepts common `x`, `y`, and `angle` plus kind-specific fields. Timer actions
+(`start`, `pause`, `reset`, or `set`) and `duration_seconds` are sent through
+`PATCH /api/stickers/{id}`; `set` requires a duration. Multiple timers are
+supported and identified by sticker ID.
 
-The tomato timer remains available through `GET/POST /api/timer`. `GET` returns
-the timer sticker; `POST` takes `action` and optional `duration_seconds` and
-moves the first timer sticker if `x`/`y` are supplied. Sticker positions are
-clamped to keep the card on-screen.
+`GET /api/snapshot` returns the latest complete renderer frame as `image/png`.
+MCP agents can call `bronzecast_get_snapshot` to receive the same board as base64
+MCP image content, inspect it, then adjust sticker coordinates or angle.
 
 ## Home dashboard
 
@@ -182,8 +194,9 @@ encoded into the shared video feed.
 `mcp/` serves the dashboard to MCP clients at `POST /mcp` with an OAuth
 authorization server in front of it. Clients register through DCR or a Client ID
 Metadata Document, then approve access on a page that takes the static key. Tools
-read status, switch characters, add or clear notifications, pin or clear the
-persistent open item, place or edit stickers, and start or pause the tomato
-timer; mutations require the `bronzecast.write` scope. Set
+read status, switch characters, add or clear notifications, list/add/update/
+remove stickers, and inspect the rendered board with `bronzecast_get_snapshot`;
+mutations require the `bronzecast.write` scope. The snapshot is read-only and
+requires `bronzecast.read`. Set
 `BRONZECAST_MCP_ACCESS_KEYS` on the MCP service and `BRONZECAST_WRITE_KEY` on
 playout to protect public writes. See [`docs/MCP.md`](docs/MCP.md).

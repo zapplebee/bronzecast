@@ -112,6 +112,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "image",
  "macroquad",
  "serde",
  "serde_json",

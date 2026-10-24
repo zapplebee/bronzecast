@@ -491,7 +491,7 @@ def create_app(settings=None, client_fetcher=None):
                         {
                             "uri": "bronzecast://dashboard/state",
                             "name": "Dashboard state",
-                            "description": "Character, notifications and stream health snapshot.",
+                            "description": "Character, stickers, notifications and stream health snapshot.",
                             "mimeType": "application/json",
                         }
                     ]
