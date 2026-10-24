@@ -156,7 +156,7 @@ fn size(kind: crate::stickers::Kind) -> (f32, f32) {
     match kind {
         crate::stickers::Kind::Timer => TIMER_SIZE,
         crate::stickers::Kind::Countdown => COUNTDOWN_SIZE,
-        crate::stickers::Kind::Todo | crate::stickers::Kind::Note => CARD_SIZE,
+        crate::stickers::Kind::Todo | crate::stickers::Kind::Memo => CARD_SIZE,
     }
 }
 
@@ -165,7 +165,7 @@ fn draw_one(view: &crate::stickers::StickerView, x: f32, y: f32) {
         crate::stickers::Kind::Timer => draw_timer(view, x, y),
         crate::stickers::Kind::Countdown => draw_countdown(view, x, y),
         crate::stickers::Kind::Todo => draw_todo(view, x, y),
-        crate::stickers::Kind::Note => draw_note(view, x, y),
+        crate::stickers::Kind::Memo => draw_memo(view, x, y),
     }
 }
 
@@ -342,7 +342,7 @@ fn draw_todo(view: &crate::stickers::StickerView, x: f32, y: f32) {
     draw_lines_centered(&lines, x + 154.0, baseline, 17.0, 20.0, ink());
 }
 
-fn draw_note(view: &crate::stickers::StickerView, x: f32, y: f32) {
+fn draw_memo(view: &crate::stickers::StickerView, x: f32, y: f32) {
     let cx = x + CARD_SIZE.0 / 2.0;
     let cy = y + CARD_SIZE.1 / 2.0;
     fruit(cx, cy, 120.0, 58.0, Color::from_rgba(255, 176, 142, 255));

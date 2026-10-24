@@ -271,7 +271,7 @@ class MCPTests(unittest.TestCase):
                 },
             )
             self.assertFalse(remove_sticker.json()["result"].get("isError", False))
-            note_sticker = self.mcp(
+            memo_sticker = self.mcp(
                 tokens["access_token"],
                 {
                     "id": 12,
@@ -279,15 +279,17 @@ class MCPTests(unittest.TestCase):
                     "params": {
                         "name": "bronzecast_add_sticker",
                         "arguments": {
-                            "kind": "note",
+                            "kind": "memo",
+                            "x": 620,
+                            "y": 80,
                             "angle": -12,
                             "title": "Plan",
-                            "text": "A movable note",
+                            "text": "A movable memo",
                         },
                     },
                 },
             )
-            self.assertFalse(note_sticker.json()["result"].get("isError", False))
+            self.assertFalse(memo_sticker.json()["result"].get("isError", False))
             timer_action = self.mcp(
                 tokens["access_token"],
                 {
@@ -300,6 +302,23 @@ class MCPTests(unittest.TestCase):
                 },
             )
             self.assertFalse(timer_action.json()["result"].get("isError", False))
+            timer_sticker = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 14,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "bronzecast_add_sticker",
+                        "arguments": {
+                            "kind": "timer",
+                            "x": 20,
+                            "y": 20,
+                            "duration_seconds": 1200,
+                        },
+                    },
+                },
+            )
+            self.assertFalse(timer_sticker.json()["result"].get("isError", False))
             snapshot = self.mcp(
                 tokens["access_token"],
                 {
@@ -348,7 +367,7 @@ class MCPTests(unittest.TestCase):
             (
                 "POST",
                 "http://generator.test/api/stickers",
-                {"kind": "note", "angle": -12, "title": "Plan", "text": "A movable note"},
+                {"kind": "memo", "x": 620, "y": 80, "angle": -12, "title": "Plan", "text": "A movable memo"},
             ),
             calls,
         )
@@ -360,6 +379,14 @@ class MCPTests(unittest.TestCase):
             ),
             calls,
         )
+        self.assertIn(
+            (
+                "POST",
+                "http://generator.test/api/stickers",
+                {"kind": "timer", "x": 20, "y": 20, "duration_seconds": 1200},
+            ),
+            calls,
+        )
 
     def test_sticker_validation(self):
         _, tokens = self.tokens()
@@ -368,9 +395,10 @@ class MCPTests(unittest.TestCase):
             ("bronzecast_add_sticker", {"kind": "countdown", "x": 1, "y": 1, "text": "x", "target": "10-31-2026"}),
             ("bronzecast_add_sticker", {"kind": "timer", "x": 1, "y": 1, "target": "2026-10-31"}),
             ("bronzecast_add_sticker", {"kind": "reminder", "x": 1, "y": 1, "text": "x", "done": True}),
+            ("bronzecast_add_sticker", {"kind": "note", "x": 1, "y": 1, "text": "x"}),
             ("bronzecast_add_sticker", {"kind": "todo", "x": 1, "y": 1, "text": "x", "duration_seconds": 60}),
-            ("bronzecast_add_sticker", {"kind": "note"}),
-            ("bronzecast_add_sticker", {"kind": "note", "title": "", "text": "  "}),
+            ("bronzecast_add_sticker", {"kind": "memo", "x": 1, "y": 1}),
+            ("bronzecast_add_sticker", {"kind": "memo", "x": 1, "y": 1, "title": "", "text": "  "}),
             ("bronzecast_add_sticker", {"kind": "reminder", "x": 961, "y": 1, "text": "x"}),
             ("bronzecast_update_sticker", {"id": 0, "x": 1}),
             ("bronzecast_update_sticker", {"id": 1}),
@@ -392,9 +420,10 @@ class MCPTests(unittest.TestCase):
     def test_timer_sticker_validation(self):
         _, tokens = self.tokens()
         for arguments in (
-            {"kind": "timer", "duration_seconds": 0},
-            {"kind": "timer", "duration_seconds": 3601},
-            {"kind": "timer", "duration_seconds": True},
+            {"kind": "timer", "x": 1, "y": 1},
+            {"kind": "timer", "x": 1, "y": 1, "duration_seconds": 0},
+            {"kind": "timer", "x": 1, "y": 1, "duration_seconds": 3601},
+            {"kind": "timer", "x": 1, "y": 1, "duration_seconds": True},
             {"id": 1, "action": "dance"},
             {"id": 1, "action": "set"},
             {"id": 1, "action": "start", "duration_seconds": 60},

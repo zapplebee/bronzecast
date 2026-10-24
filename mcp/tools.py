@@ -11,7 +11,7 @@ import httpx
 TIMEOUT = 5.0
 CHARACTER_ID_RE = re.compile(r"^[^\s\x00-\x1f\x7f]{1,64}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-STICKER_KINDS = {"countdown", "timer", "todo", "note"}
+STICKER_KINDS = {"countdown", "timer", "todo", "memo"}
 
 
 class ToolError(Exception):
@@ -171,7 +171,7 @@ TOOLS = [
         "title": "List stickers",
         "description": (
             "Read every persistent sticker on the video board, including "
-            "countdowns, tomato timers, todos, and notes."
+            "countdowns, tomato timers, todos, and memos."
         ),
         "inputSchema": {
             "type": "object",
@@ -189,29 +189,30 @@ TOOLS = [
         "name": "bronzecast_add_sticker",
         "title": "Add sticker",
         "description": (
-            "Place a persistent sticker anywhere on the board. x and y default "
-            "by kind; angle is optional clockwise degrees. Use todo for "
-            "completable tasks and note for information to keep visible. "
-            "Countdowns need a YYYY-MM-DD target; timer duration is optional."
+            "Create an agent-controlled sticker at the supplied board x/y; there "
+            "are no seeded stickers or placement defaults. angle is optional "
+            "clockwise degrees. Use todo for completable tasks and memo for "
+            "information to keep visible. Countdowns need a YYYY-MM-DD target; "
+            "timers require an explicit duration_seconds."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "kind": {
                     "type": "string",
-                    "enum": ["countdown", "timer", "todo", "note"],
+                    "enum": ["countdown", "timer", "todo", "memo"],
                 },
                 "x": {
                     "type": "number",
                     "minimum": 0,
                     "maximum": 960,
-                    "description": "Unrotated top-left x in board pixels; defaults by kind.",
+                    "description": "Required unrotated top-left x in board pixels.",
                 },
                 "y": {
                     "type": "number",
                     "minimum": 0,
                     "maximum": 540,
-                    "description": "Unrotated top-left y in board pixels; defaults by kind.",
+                    "description": "Required unrotated top-left y in board pixels.",
                 },
                 "angle": {
                     "type": "number",
@@ -220,12 +221,12 @@ TOOLS = [
                 "title": {
                     "type": "string",
                     "maxLength": 48,
-                    "description": "Optional note title; note requires title or text.",
+                    "description": "Optional memo title; memo requires title or text.",
                 },
                 "text": {
                     "type": "string",
                     "maxLength": 160,
-                    "description": "Text for countdown, todo, or note; required except for timer and note.",
+                    "description": "Text for countdown, todo, or memo; countdown/todo require it.",
                 },
                 "target": {
                     "type": "string",
@@ -235,14 +236,14 @@ TOOLS = [
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 3600,
-                    "description": "Optional timer duration.",
+                    "description": "Required for timers; duration in seconds (1–3600).",
                 },
                 "done": {
                     "type": "boolean",
                     "description": "Initial todo completion state.",
                 },
             },
-            "required": ["kind"],
+            "required": ["kind", "x", "y"],
             "additionalProperties": False,
         },
         "annotations": {
@@ -259,7 +260,7 @@ TOOLS = [
             "Move, rotate, or edit a sticker. x and y are unrotated top-left "
             "board coordinates; angle is clockwise degrees. Timers accept "
             "action (start, pause, reset, set); countdowns accept target; "
-            "todos accept done; notes accept title and text."
+            "todos accept done; memos accept title and text."
         ),
         "inputSchema": {
             "type": "object",
@@ -487,11 +488,12 @@ def _validate_sticker_add(arguments):
         raise ToolError(f"unknown sticker field: {sorted(unknown)[0]}")
     kind = arguments.get("kind")
     if kind not in STICKER_KINDS:
-        raise ToolError("kind must be countdown, timer, todo, or note")
+        raise ToolError("kind must be countdown, timer, todo, or memo")
     payload = {"kind": kind}
     for name, maximum in (("x", 960), ("y", 540)):
-        if name in arguments:
-            payload[name] = _coordinate(arguments, name, maximum)
+        if name not in arguments:
+            raise ToolError(f"{name} is required")
+        payload[name] = _coordinate(arguments, name, maximum)
     if "angle" in arguments:
         payload["angle"] = _angle(arguments["angle"])
     if "title" in arguments:
@@ -502,7 +504,7 @@ def _validate_sticker_add(arguments):
         payload["text"] = _sticker_text(
             arguments.get("text"),
             required=kind in {"countdown", "todo"},
-            newlines=kind in {"todo", "note"},
+            newlines=kind in {"todo", "memo"},
         )
     target = arguments.get("target")
     duration = arguments.get("duration_seconds")
@@ -527,22 +529,24 @@ def _validate_sticker_add(arguments):
         name in arguments for name in ("title", "target", "duration_seconds")
     ):
         raise ToolError("todo does not accept title, target, or duration_seconds")
-    if kind == "note" and any(
+    if kind == "memo" and any(
         name in arguments for name in ("target", "duration_seconds", "done")
     ):
-        raise ToolError("note does not accept target, duration_seconds, or done")
+        raise ToolError("memo does not accept target, duration_seconds, or done")
     if kind == "countdown":
         if target is None:
             raise ToolError("countdown requires target (YYYY-MM-DD)")
         payload["target"] = _sticker_date(target)
     elif kind == "timer" and duration is not None:
         payload["duration_seconds"] = _sticker_duration(duration)
+    elif kind == "timer":
+        raise ToolError("timer requires duration_seconds")
     elif kind == "todo":
         if done is not None:
             payload["done"] = done
-    elif kind == "note":
+    elif kind == "memo":
         if not payload.get("title", "").strip() and not payload.get("text", "").strip():
-            raise ToolError("note requires a non-empty title or text")
+            raise ToolError("memo requires a non-empty title or text")
     return payload
 
 

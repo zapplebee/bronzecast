@@ -85,7 +85,7 @@ geometry and widths.
 - Title limit 48, message limit 320, newlines only in the message.
 - Age format: `now`, `Nm`, `Nh`, `Nd`.
 - Header latest-title line, clock, status metrics, and sticker draw order.
-- All sticker rendering, including the fruit timer, countdown, todo, and note.
+- All sticker rendering, including the fruit timer, countdown, todo, and memo.
 
 ## Acceptance criteria
 

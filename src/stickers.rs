@@ -15,7 +15,6 @@ use std::{
 pub type SharedStickers = Arc<Store>;
 
 const VERSION: u8 = 1;
-const DEFAULT_DURATION: u64 = 25 * 60;
 const MAX_DURATION: u64 = 60 * 60;
 const CANVAS_WIDTH: f32 = 960.0;
 const CANVAS_HEIGHT: f32 = 540.0;
@@ -26,7 +25,7 @@ pub enum Kind {
     Timer,
     Countdown,
     Todo,
-    Note,
+    Memo,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -64,7 +63,7 @@ enum Sticker {
         created_at: u64,
         updated_at: u64,
     },
-    Note {
+    Memo {
         id: u64,
         x: f32,
         y: f32,
@@ -82,7 +81,7 @@ impl Sticker {
             Self::Timer { id, .. }
             | Self::Countdown { id, .. }
             | Self::Todo { id, .. }
-            | Self::Note { id, .. } => *id,
+            | Self::Memo { id, .. } => *id,
         }
     }
 
@@ -91,7 +90,7 @@ impl Sticker {
             Self::Timer { .. } => Kind::Timer,
             Self::Countdown { .. } => Kind::Countdown,
             Self::Todo { .. } => Kind::Todo,
-            Self::Note { .. } => Kind::Note,
+            Self::Memo { .. } => Kind::Memo,
         }
     }
 
@@ -100,7 +99,7 @@ impl Sticker {
             Self::Timer { x, y, angle, .. }
             | Self::Countdown { x, y, angle, .. }
             | Self::Todo { x, y, angle, .. }
-            | Self::Note { x, y, angle, .. } => (*x, *y, *angle),
+            | Self::Memo { x, y, angle, .. } => (*x, *y, *angle),
         }
     }
 
@@ -121,7 +120,7 @@ impl Sticker {
                 updated_at,
                 ..
             }
-            | Self::Note {
+            | Self::Memo {
                 created_at,
                 updated_at,
                 ..
@@ -149,7 +148,7 @@ impl Sticker {
                 angle: sa,
                 ..
             }
-            | Self::Note {
+            | Self::Memo {
                 x: sx,
                 y: sy,
                 angle: sa,
@@ -167,7 +166,7 @@ impl Sticker {
             Self::Timer { updated_at, .. }
             | Self::Countdown { updated_at, .. }
             | Self::Todo { updated_at, .. }
-            | Self::Note { updated_at, .. } => *updated_at = value,
+            | Self::Memo { updated_at, .. } => *updated_at = value,
         }
     }
 
@@ -201,11 +200,11 @@ impl Sticker {
                 Self::Todo { text, .. } => {
                     valid_text(text, 160, true) && validate_stored_position(Kind::Todo, x, y, angle)
                 }
-                Self::Note { title, text, .. } => {
+                Self::Memo { title, text, .. } => {
                     valid_optional_text(title, 48, false)
                         && valid_optional_text(text, 160, true)
                         && (!title.trim().is_empty() || !text.trim().is_empty())
-                        && validate_stored_position(Kind::Note, x, y, angle)
+                        && validate_stored_position(Kind::Memo, x, y, angle)
                 }
             }
     }
@@ -258,14 +257,14 @@ impl Sticker {
                 view.done = Some(*done);
                 view.state = if *done { "done" } else { "open" };
             }
-            Self::Note { title, text, .. } => {
+            Self::Memo { title, text, .. } => {
                 if !title.is_empty() {
                     view.title = Some(title.clone());
                 }
                 if !text.is_empty() {
                     view.text = Some(text.clone());
                 }
-                view.state = "note";
+                view.state = "memo";
             }
         }
         view
@@ -435,9 +434,7 @@ impl Store {
                 }
                 (file.next_id, file.stickers)
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                (2, vec![default_timer(1, now_seconds())])
-            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (1, Vec::new()),
             Err(error) => return Err(format!("could not read {}: {error}", path.display())),
         };
         Ok(Arc::new(Self {
@@ -474,13 +471,12 @@ impl Store {
         validate_new(&input)?;
         let mut inner = self.inner.lock().expect("sticker lock");
         let id = inner.next_id;
-        let (default_x, default_y) = default_position(input.kind);
+        let x = input.x.expect("validated sticker x");
+        let y = input.y.expect("validated sticker y");
         let angle = normalize_angle(input.angle.unwrap_or(0.0));
-        let x = input.x.unwrap_or(default_x);
-        let y = input.y.unwrap_or(default_y);
         let mut sticker = match input.kind {
             Kind::Timer => {
-                let duration = input.duration_seconds.unwrap_or(DEFAULT_DURATION);
+                let duration = input.duration_seconds.expect("validated timer duration");
                 Sticker::Timer {
                     id,
                     x,
@@ -518,7 +514,7 @@ impl Store {
                 created_at: now,
                 updated_at: now,
             },
-            Kind::Note => Sticker::Note {
+            Kind::Memo => Sticker::Memo {
                 id,
                 x,
                 y,
@@ -606,7 +602,7 @@ impl Store {
                     *done = value;
                 }
             }
-            Sticker::Note { title, text, .. } => {
+            Sticker::Memo { title, text, .. } => {
                 if let Some(value) = input.title {
                     *title = value.trim().to_owned();
                 }
@@ -671,35 +667,11 @@ impl Store {
     }
 }
 
-fn default_timer(id: u64, now: u64) -> Sticker {
-    Sticker::Timer {
-        id,
-        x: 20.0,
-        y: 16.0,
-        angle: 0.0,
-        duration_seconds: DEFAULT_DURATION,
-        remaining_at_anchor_seconds: DEFAULT_DURATION,
-        running_since: None,
-        has_started: false,
-        created_at: now,
-        updated_at: now,
-    }
-}
-
-fn default_position(kind: Kind) -> (f32, f32) {
-    match kind {
-        Kind::Timer => (20.0, 16.0),
-        Kind::Countdown => (480.0, 347.0),
-        Kind::Todo => (697.0, 380.0),
-        Kind::Note => (697.0, 12.0),
-    }
-}
-
 fn dimensions(kind: Kind) -> (f32, f32) {
     match kind {
         Kind::Timer => (164.0, 164.0),
         Kind::Countdown => (200.0, 190.0),
-        Kind::Todo | Kind::Note => (260.0, 140.0),
+        Kind::Todo | Kind::Memo => (260.0, 140.0),
     }
 }
 
@@ -733,11 +705,14 @@ fn normalize_angle(angle: f32) -> f32 {
 }
 
 fn validate_new(input: &NewSticker) -> Result<(), (StatusCode, String)> {
-    for (name, value, max) in [("x", input.x, CANVAS_WIDTH), ("y", input.y, CANVAS_HEIGHT)] {
-        if let Some(value) = value {
-            validate_coordinate(value, name, max)?;
-        }
-    }
+    let x = input
+        .x
+        .ok_or((StatusCode::BAD_REQUEST, "x is required".into()))?;
+    let y = input
+        .y
+        .ok_or((StatusCode::BAD_REQUEST, "y is required".into()))?;
+    validate_coordinate(x, "x", CANVAS_WIDTH)?;
+    validate_coordinate(y, "y", CANVAS_HEIGHT)?;
     if input.angle.is_some_and(|angle| !angle.is_finite()) {
         return Err((StatusCode::BAD_REQUEST, "angle must be finite".into()));
     }
@@ -750,9 +725,11 @@ fn validate_new(input: &NewSticker) -> Result<(), (StatusCode, String)> {
                     || input.done.is_some(),
                 "timer accepts only duration_seconds in addition to position and angle",
             )?;
-            if let Some(duration) = input.duration_seconds {
-                validate_duration(duration)?;
-            }
+            let duration = input.duration_seconds.ok_or((
+                StatusCode::BAD_REQUEST,
+                "timer requires duration_seconds".into(),
+            ))?;
+            validate_duration(duration)?;
         }
         Kind::Countdown => {
             reject_fields(
@@ -778,12 +755,12 @@ fn validate_new(input: &NewSticker) -> Result<(), (StatusCode, String)> {
             )?;
             validate_body(input.text.as_deref().unwrap_or(""), "todo")?;
         }
-        Kind::Note => {
+        Kind::Memo => {
             reject_fields(
                 input.target.is_some() || input.duration_seconds.is_some() || input.done.is_some(),
-                "note does not accept target, duration_seconds, or done",
+                "memo does not accept target, duration_seconds, or done",
             )?;
-            validate_optional_note(
+            validate_memo(
                 input.title.as_deref().unwrap_or(""),
                 input.text.as_deref().unwrap_or(""),
             )?;
@@ -859,17 +836,17 @@ fn validate_update(sticker: &Sticker, input: &StickerUpdate) -> Result<(), (Stat
                 validate_body(text, "todo")?;
             }
         }
-        Sticker::Note { title, text, .. } => {
+        Sticker::Memo { title, text, .. } => {
             reject_fields(
                 input.target.is_some()
                     || input.done.is_some()
                     || input.action.is_some()
                     || input.duration_seconds.is_some(),
-                "note accepts only position, angle, title, and text",
+                "memo accepts only position, angle, title, and text",
             )?;
             let next_title = input.title.as_deref().unwrap_or(title);
             let next_text = input.text.as_deref().unwrap_or(text);
-            validate_optional_note(next_title, next_text)?;
+            validate_memo(next_title, next_text)?;
         }
     }
     if input.x.is_none()
@@ -944,20 +921,20 @@ fn validate_body(text: &str, name: &str) -> Result<(), (StatusCode, String)> {
     }
 }
 
-fn validate_optional_note(title: &str, text: &str) -> Result<(), (StatusCode, String)> {
+fn validate_memo(title: &str, text: &str) -> Result<(), (StatusCode, String)> {
     if !valid_optional_text(title, 48, false) {
         return Err((
             StatusCode::BAD_REQUEST,
-            "note title must be at most 48 characters with no control characters".into(),
+            "memo title must be at most 48 characters with no control characters".into(),
         ));
     }
     if !valid_optional_text(text, 160, true) {
-        return Err((StatusCode::BAD_REQUEST, "note text must be at most 160 characters; only newlines are allowed as control characters".into()));
+        return Err((StatusCode::BAD_REQUEST, "memo text must be at most 160 characters; only newlines are allowed as control characters".into()));
     }
     if title.trim().is_empty() && text.trim().is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            "note requires a non-empty title or text".into(),
+            "memo requires a non-empty title or text".into(),
         ));
     }
     Ok(())
@@ -1101,8 +1078,8 @@ mod tests {
     fn input(kind: Kind, text: Option<&str>) -> NewSticker {
         NewSticker {
             kind,
-            x: None,
-            y: None,
+            x: Some(100.0),
+            y: Some(100.0),
             angle: None,
             title: None,
             text: text.map(str::to_owned),
@@ -1127,27 +1104,25 @@ mod tests {
     }
 
     #[test]
-    fn seeds_only_a_ready_timer_and_persists_tagged_records() {
+    fn empty_store_stays_empty_and_persists_tagged_memos() {
         let dir = temp_dir();
         let store = Store::load(&dir).unwrap();
         let views = store.snapshot_at(1_000, NaiveDate::from_ymd_opt(2026, 10, 24).unwrap());
-        assert_eq!(views.len(), 1);
-        assert_eq!(views[0].kind, Kind::Timer);
-        assert_eq!(views[0].state, "ready");
-        assert_eq!(views[0].angle, 0.0);
+        assert!(views.is_empty());
+        assert!(!dir.join("stickers.json").exists());
 
-        let mut note = input(Kind::Note, Some("Body"));
-        note.title = Some("Title".into());
-        let note = store
-            .add_at(note, 1_000, NaiveDate::from_ymd_opt(2026, 10, 24).unwrap())
+        let mut memo = input(Kind::Memo, Some("Body"));
+        memo.title = Some("Title".into());
+        let memo = store
+            .add_at(memo, 1_000, NaiveDate::from_ymd_opt(2026, 10, 24).unwrap())
             .unwrap();
-        assert_eq!(note.kind, Kind::Note);
+        assert_eq!(memo.kind, Kind::Memo);
         let raw = fs::read_to_string(dir.join("stickers.json")).unwrap();
         assert!(raw.contains("\"version\": 1"));
-        assert!(raw.contains("\"kind\": \"note\""));
-        assert!(!raw.contains("remaining_at_anchor_seconds\": 0"));
+        assert!(raw.contains("\"kind\": \"memo\""));
+        assert!(!raw.contains("\"kind\": \"timer\""));
         let reloaded = Store::load(&dir).unwrap();
-        assert_eq!(reloaded.snapshot().len(), 2);
+        assert_eq!(reloaded.snapshot().len(), 1);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1168,7 +1143,7 @@ mod tests {
         );
         assert!(
             store
-                .add_at(input(Kind::Note, Some("   ")), 1_000, today)
+                .add_at(input(Kind::Memo, Some("   ")), 1_000, today)
                 .is_err()
         );
         let mut bad = input(Kind::Todo, Some("Task"));
@@ -1181,7 +1156,9 @@ mod tests {
     fn timer_anchor_survives_restart_and_finished_start_restarts() {
         let dir = temp_dir();
         let store = Store::load(&dir).unwrap();
-        let timer_id = store.snapshot()[0].id;
+        let mut timer = input(Kind::Timer, None);
+        timer.duration_seconds = Some(10);
+        let timer_id = store.add_at(timer, 1_000, today()).unwrap().id;
         let started = store
             .update_at(
                 timer_id,
@@ -1237,6 +1214,24 @@ mod tests {
         assert_eq!(view.angle, 90.0);
         assert!(view.x + 130.0 <= CANVAS_WIDTH);
         assert!(view.y + 70.0 <= CANVAS_HEIGHT);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn creates_require_agent_supplied_coordinates_and_timer_duration() {
+        let dir = temp_dir();
+        let store = Store::load(&dir).unwrap();
+        let today = today();
+        let mut missing_coordinates = input(Kind::Todo, Some("Task"));
+        missing_coordinates.x = None;
+        assert!(store.add_at(missing_coordinates, 1_000, today).is_err());
+
+        let missing_duration = input(Kind::Timer, None);
+        assert!(store.add_at(missing_duration, 1_000, today).is_err());
+        let mut timer_input = input(Kind::Timer, None);
+        timer_input.duration_seconds = Some(600);
+        let timer = store.add_at(timer_input, 1_000, today).unwrap();
+        assert_eq!(timer.duration_seconds, Some(600));
         let _ = fs::remove_dir_all(dir);
     }
 

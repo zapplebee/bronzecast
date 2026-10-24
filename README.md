@@ -68,16 +68,15 @@ playing. `GET /api/stream` remains available and reports live/fallback input sta
 ## Stickers and tomato timer
 
 Persistent stickers can be placed anywhere on the 960×540 video board. The
-renderer supports auto-updating countdowns, tomato timers, todos, and notes.
+renderer supports auto-updating countdowns, tomato timers, todos, and memos.
 They are stored as kind-specific records in versioned `state/stickers.json` and
-survive renderer restarts; a missing store seeds one 25-minute tomato timer at the
-top-left of the character frame. There is no fixed open-item panel or separate
-timer API.
+survive renderer restarts. A new or empty store starts with **zero stickers**;
+there is no fixed open-item panel or separate timer API.
 
 `x`/`y` are the unrotated top-left in board pixels. `angle` is optional clockwise
-degrees around the sticker center (default `0`). The renderer clamps the rotated
-sticker, including its shadow, onto the board. Coordinates are optional on create
-and use kind-specific defaults. No collision avoidance is performed.
+degrees around the sticker center (default `0`). Every create requires agent-
+supplied `x` and `y`; the renderer clamps the rotated sticker, including its
+shadow, onto the board. No collision avoidance is performed.
 The canonical data/action contract for API and MCP agents is documented in
 [`docs/PLAN_UNIFY_STICKERS.md`](docs/PLAN_UNIFY_STICKERS.md).
 
@@ -95,11 +94,11 @@ curl -X PATCH http://localhost:8080/api/stickers/2 \
 curl -X DELETE http://localhost:8080/api/stickers/2
 ```
 
-`POST /api/stickers` requires `kind` (`countdown`, `timer`, `todo`, or `note`).
-Countdowns require `text` and a `YYYY-MM-DD` `target`; timers accept optional
-`duration_seconds` (1–3600); todos require `text` and accept `done`; notes require
-at least one of `title` (up to 48 characters) or `text` (up to 160). `PATCH`
-accepts common `x`, `y`, and `angle` plus kind-specific fields. Timer actions
+`POST /api/stickers` requires `kind`, `x`, and `y`; kinds are `countdown`,
+`timer`, `todo`, and `memo`. Countdowns require `text` and a `YYYY-MM-DD` `target`;
+timers require `duration_seconds` (1–3600); todos require `text` and accept `done`;
+memos require at least one of `title` (up to 48 characters) or `text` (up to 160).
+`PATCH` accepts common `x`, `y`, and `angle` plus kind-specific fields. Timer actions
 (`start`, `pause`, `reset`, or `set`) and `duration_seconds` are sent through
 `PATCH /api/stickers/{id}`; `set` requires a duration. Multiple timers are
 supported and identified by sticker ID.

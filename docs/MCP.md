@@ -78,23 +78,26 @@ must be `none`, and PKCE with `S256` is mandatory. There are no client secrets.
 | `bronzecast_send_notification` | write | `{title?, message}`; 48/320 character limits. |
 | `bronzecast_clear_notifications` | write | Removes every notification. |
 | `bronzecast_list_stickers` | read | Every persistent sticker and its computed state. |
-| `bronzecast_add_sticker` | write | `{kind, x?, y?, angle?, title?, text?, target?, duration_seconds?, done?}`. |
+| `bronzecast_add_sticker` | write | `{kind, x, y, angle?, title?, text?, target?, duration_seconds?, done?}`. Timer creation also requires `duration_seconds`. |
 | `bronzecast_update_sticker` | write | `{id, x?, y?, angle?, title?, text?, target?, done?, action?, duration_seconds?}`. |
 | `bronzecast_remove_sticker` | write | `{id}`; deletes the sticker. |
 | `bronzecast_stream_status` | read | Playout source, frame age, encoder state. |
 
 Stickers are persistent, movable and rotatable cards rendered into the video.
 They live in versioned `stickers.json` under `BRONZECAST_STATE_DIR` and survive
-renderer restarts. `kind` is `timer`, `countdown`, `todo`, or `note`. Coordinates
-are unrotated top-left positions in the 960×540 board coordinate space; `angle`
-is clockwise degrees around the sticker center. The renderer clamps rotated
-visual bounds to the canvas. Coordinates default by kind when omitted.
+renderer restarts. A new store starts empty; the renderer never seeds a timer or
+any other sticker. `kind` is `timer`, `countdown`, `todo`, or `memo`. Each create
+requires agent-supplied `x` and `y`, the unrotated top-left in 960×540 board
+coordinates. `angle` is optional clockwise degrees around the sticker center.
+The renderer clamps rotated visual bounds to the canvas; there are no per-kind
+placement defaults.
 
 Countdowns require a `YYYY-MM-DD` target and update automatically; todos have a
-completion flag; notes have a title and/or body with no completion state. Timers
-are identified by sticker ID and accept `action` (`start`, `pause`, `reset`, or
-`set`) through `bronzecast_update_sticker`; `set` requires a duration from 1–3600
-seconds. No open-item/timer aliases or runtime state migrations are present.
+completion flag; memos have a title and/or body with no completion state. Timers
+require an agent-supplied duration from 1–3600 seconds, are identified by sticker
+ID, and accept `action` (`start`, `pause`, `reset`, or `set`) through
+`bronzecast_update_sticker`. No open-item/timer aliases or runtime state
+migrations are present.
 
 `bronzecast_get_snapshot` returns the latest complete 960×540 renderer frame as
 a standard MCP image content item containing base64 PNG data. It includes the
