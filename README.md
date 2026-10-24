@@ -142,3 +142,13 @@ check the whole light sweep and the original-size/cropped frames to check artifa
 Captured frames include compression; they are not pristine GPU screenshots.
 The fixed camera uses a slightly elevated three-quarter view. All effects are
 encoded into the shared video feed.
+
+## Control from MCP
+
+`mcp/` serves the dashboard to MCP clients at `POST /mcp` with an OAuth
+authorization server in front of it. Clients register through DCR or a Client ID
+Metadata Document, then approve access on a page that takes the static key. Tools
+read status, switch characters, add or clear notifications, and pin or clear the
+persistent open item; mutations require the `bronzecast.write` scope. Set
+`BRONZECAST_MCP_ACCESS_KEYS` on the MCP service and `BRONZECAST_WRITE_KEY` on
+playout to protect public writes. See [`docs/MCP.md`](docs/MCP.md).

@@ -1,3 +1,4 @@
+use crate::open_item::OpenItem;
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{Local, Timelike};
 use macroquad::prelude::*;
@@ -72,6 +73,11 @@ pub async fn list(State(feed): State<SharedFeed>) -> Json<Vec<Notification>> {
     Json(feed.lock().unwrap().entries.iter().cloned().collect())
 }
 
+pub async fn clear(State(feed): State<SharedFeed>) -> StatusCode {
+    feed.lock().unwrap().entries.clear();
+    StatusCode::NO_CONTENT
+}
+
 fn wrap(text: &str, width: f32, size: u16, max_lines: usize) -> Vec<String> {
     let mut lines = vec![String::new()];
     for c in text.chars() {
@@ -99,7 +105,7 @@ fn wrap(text: &str, width: f32, size: u16, max_lines: usize) -> Vec<String> {
 }
 
 /// Draw directly into the encoder target: every media client sees this same feed.
-pub fn draw(feed: &SharedFeed, elapsed: f32, character_name: &str) {
+pub fn draw(feed: &SharedFeed, open_item: Option<&OpenItem>, elapsed: f32, character_name: &str) {
     let (entries, count): (Vec<_>, _) = {
         let feed = feed.lock().unwrap();
         (
@@ -162,6 +168,8 @@ pub fn draw(feed: &SharedFeed, elapsed: f32, character_name: &str) {
     draw_rectangle(476.0, 165.0, 450.0, 2.0, muted);
     draw_rectangle(476.0, 165.0, 450.0 * day_fraction, 2.0, green);
 
+    crate::open_item::draw(open_item, now.timestamp().max(0) as u64);
+
     let uptime = elapsed.max(0.0) as u64;
     let uptime_label = if uptime >= 86400 {
         format!("{}d {:02}h", uptime / 86400, uptime / 3600 % 24)
@@ -222,4 +230,27 @@ pub fn draw(feed: &SharedFeed, elapsed: f32, character_name: &str) {
         }
     }
     draw_text("BRONZECAST / LOCAL SIGNAL", 28.0, 522.0, 12.0, muted);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn clear_removes_every_entry() {
+        let feed: SharedFeed = Arc::new(Mutex::new(Feed::default()));
+        {
+            let mut state = feed.lock().unwrap();
+            state.next_id = 1;
+            state.entries.push_back(Notification {
+                id: 1,
+                title: "Kupo!".into(),
+                message: "You have mail.".into(),
+                created_at: 0,
+            });
+        }
+        assert_eq!(clear(State(feed.clone())).await, StatusCode::NO_CONTENT);
+        assert!(feed.lock().unwrap().entries.is_empty());
+        assert_eq!(feed.lock().unwrap().next_id, 1);
+    }
 }

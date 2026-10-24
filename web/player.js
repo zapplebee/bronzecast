@@ -149,6 +149,39 @@ document.querySelector("#cast").addEventListener("click", async () => {
 // automatically makes it available here without frontend model-ID branches.
 const characterSelect = document.querySelector("#character");
 let switching = false;
+const writeKeyStorage = "bronzecast.writeKey";
+function storedWriteKey() {
+  try {
+    return sessionStorage.getItem(writeKeyStorage) || "";
+  } catch {
+    return "";
+  }
+}
+function rememberWriteKey(key) {
+  try {
+    sessionStorage.setItem(writeKeyStorage, key);
+  } catch {
+    /* storage can be blocked; the retry still carries the key */
+  }
+}
+async function writeFetch(url, options) {
+  const send = (key) =>
+    fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(key ? { Authorization: `Bearer ${key}` } : {}),
+      },
+    });
+  let response = await send(storedWriteKey());
+  if (response.status !== 401) return response;
+  const key = window.prompt(
+    "This dashboard requires its write key to make changes:",
+  );
+  if (!key) return response;
+  rememberWriteKey(key.trim());
+  return send(key.trim());
+}
 async function refreshCharacters() {
   if (switching) return;
   try {
@@ -174,7 +207,7 @@ characterSelect.addEventListener("change", async () => {
   switching = true;
   characterSelect.disabled = true;
   try {
-    const response = await fetch("/api/character", {
+    const response = await writeFetch("/api/character", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: characterSelect.value }),

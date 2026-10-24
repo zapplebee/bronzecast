@@ -1,0 +1,75 @@
+# Server deployment: docker compose -f compose.traefik.yaml up -d --build
+# Standalone file, not an override of the local Compose port mappings.
+# Provide BRONZECAST_MCP_ACCESS_KEYS and BRONZECAST_WRITE_KEY in .env.
+services:
+  playout:
+    build:
+      context: .
+      dockerfile: playout/Dockerfile
+    image: bronzecast-playout:latest
+    container_name: bronzecast-playout
+    init: true
+    restart: unless-stopped
+    ports:
+      - "192.168.1.86:5000:5000/udp"
+    environment:
+      GENERATOR_URL: "${GENERATOR_URL:-http://192.168.1.223:8081}"
+      INPUT_TIMEOUT: "1.5"
+      BRONZECAST_WRITE_KEY: "${BRONZECAST_WRITE_KEY:?set BRONZECAST_WRITE_KEY in .env}"
+    volumes:
+      - hls:/data/hls
+    networks:
+      - nyx_svc_dev
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=nyx_svc_dev
+      - traefik.http.routers.bronzecast.rule=Host(`mail.dev.prettybird.zapplebee.online`)
+      - traefik.http.routers.bronzecast.entrypoints=websecure
+      - traefik.http.routers.bronzecast.tls=true
+      - traefik.http.routers.bronzecast.tls.certresolver=le
+      - traefik.http.services.bronzecast.loadbalancer.server.port=8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+  mcp:
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
+    image: bronzecast-mcp:latest
+    container_name: bronzecast-mcp
+    init: true
+    restart: unless-stopped
+    environment:
+      PUBLIC_BASE_URL: "https://home-mcp.dev.prettybird.zapplebee.online"
+      BRONZECAST_MCP_ACCESS_KEYS: "${BRONZECAST_MCP_ACCESS_KEYS:?set BRONZECAST_MCP_ACCESS_KEYS in .env}"
+      GENERATOR_URL: "${GENERATOR_URL:-http://192.168.1.223:8081}"
+      PLAYOUT_URL: "http://playout:8080"
+      MCP_DB: "/data/mcp.sqlite3"
+    volumes:
+      - mcp-data:/data
+    networks:
+      - nyx_svc_dev
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=nyx_svc_dev
+      - traefik.http.routers.bronzecast-mcp.rule=Host(`home-mcp.dev.prettybird.zapplebee.online`)
+      - traefik.http.routers.bronzecast-mcp.entrypoints=websecure
+      - traefik.http.routers.bronzecast-mcp.tls=true
+      - traefik.http.routers.bronzecast-mcp.tls.certresolver=le
+      - traefik.http.services.bronzecast-mcp.loadbalancer.server.port=8090
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+volumes:
+  hls:
+  mcp-data:
+networks:
+  nyx_svc_dev:
+    external: true
+    name: nyx_svc_dev

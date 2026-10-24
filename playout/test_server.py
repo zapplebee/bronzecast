@@ -2,7 +2,13 @@ import io
 import unittest
 from unittest.mock import patch
 
-from playout.server import MediaBuffer, AUDIO_BYTES, FRAME_BYTES, read_exact
+from playout.server import (
+    AUDIO_BYTES,
+    FRAME_BYTES,
+    MediaBuffer,
+    read_exact,
+    write_authorized,
+)
 
 
 class BufferTests(unittest.TestCase):
@@ -51,6 +57,17 @@ class BufferTests(unittest.TestCase):
             buffer.sound(0, b'incomplete')
         self.assertIsNone(read_exact(io.BytesIO(b'ab'), 3))
         self.assertEqual(read_exact(io.BytesIO(b'abcd'), 3), b'abc')
+
+
+class WriteAuthorizationTests(unittest.TestCase):
+    def test_missing_key_allows_legacy_local_writes(self):
+        self.assertTrue(write_authorized({}, ''))
+
+    def test_configured_key_requires_bearer_or_header(self):
+        self.assertFalse(write_authorized({}, 'secret'))
+        self.assertFalse(write_authorized({'Authorization': 'Bearer wrong'}, 'secret'))
+        self.assertTrue(write_authorized({'Authorization': 'Bearer secret'}, 'secret'))
+        self.assertTrue(write_authorized({'X-Bronzecast-Key': 'secret'}, 'secret'))
 
 
 if __name__ == '__main__':

@@ -28,5 +28,38 @@ services:
       timeout: 3s
       retries: 3
       start_period: 15s
+  mcp:
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      PUBLIC_BASE_URL: "http://localhost:8090"
+      BRONZECAST_MCP_ACCESS_KEYS: "${BRONZECAST_MCP_ACCESS_KEYS:-}"
+      GENERATOR_URL: "http://host.docker.internal:8081"
+      PLAYOUT_URL: "http://playout:8080"
+      MCP_DB: "/data/mcp.sqlite3"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - mcp-data:/data
+    depends_on:
+      - playout
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 volumes:
   hls:
+  mcp-data:

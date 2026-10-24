@@ -1,6 +1,7 @@
 /target/
 /stream/
 /scratch/
+/state/
 
 # Local session context and original source-asset copies (runtime assets are in characters/).
 /MEMORY.md

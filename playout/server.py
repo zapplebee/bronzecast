@@ -4,6 +4,7 @@ The decoder may die/restart; the output encoder never sees input EOF until this
 service shuts down. Output clocks keep running on test-card frames and PCM silence.
 """
 import collections
+import hmac
 import http.server
 import json
 import logging
@@ -107,6 +108,18 @@ def write_all(fd, data):
         remaining = remaining[count:]
 
 
+def write_authorized(headers, key):
+    """Write requests pass when no key is configured; otherwise a bearer/header match is required."""
+    if not key:
+        return True
+    supplied = headers.get('Authorization', '')
+    if supplied.lower().startswith('bearer '):
+        supplied = supplied[7:]
+    else:
+        supplied = headers.get('X-Bronzecast-Key', '')
+    return hmac.compare_digest(supplied.strip(), key)
+
+
 class Playout:
     def __init__(self):
         self.media = MediaBuffer(float(os.getenv('INPUT_TIMEOUT', '1.5')))
@@ -114,6 +127,7 @@ class Playout:
         self.output = pathlib.Path(os.getenv('HLS_DIR', '/data/hls'))
         self.web = pathlib.Path(os.getenv('WEB_DIR', '/app/web')).resolve()
         self.generator_url = os.getenv('GENERATOR_URL', 'http://host.docker.internal:8081').rstrip('/')
+        self.write_key = os.getenv('BRONZECAST_WRITE_KEY', '').strip()
         self.encoder = None
         self.decoder = None
         self.encoder_started = time.monotonic()
@@ -307,9 +321,9 @@ def handler_for(playout):
 
         def end_headers(self):
             self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type, Range')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization, X-Bronzecast-Key')
             self.send_header('Access-Control-Expose-Headers', 'Content-Length, Content-Range')
-            self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS')
             self.send_header('Cache-Control', 'no-store')
             super().end_headers()
 
@@ -327,9 +341,12 @@ def handler_for(playout):
 
         def proxy(self):
             path = urllib.parse.urlsplit(self.path).path
-            allowed = ('/api/notifications', '/api/characters', '/api/character')
+            allowed = ('/api/notifications', '/api/characters', '/api/character', '/api/open-item')
             if path not in allowed:
                 self.respond(404, b'{"error":"Unknown API endpoint"}')
+                return
+            if self.command != 'GET' and not write_authorized(self.headers, playout.write_key):
+                self.respond(401, b'{"error":"Write key required"}')
                 return
             try:
                 length = int(self.headers.get('Content-Length', '0'))
@@ -339,7 +356,7 @@ def handler_for(playout):
             if length < 0 or length > 16384:
                 self.respond(413, b'{"error":"Request too large"}')
                 return
-            payload = self.rfile.read(length) if self.command == 'POST' else None
+            payload = self.rfile.read(length) if self.command in ('POST', 'PUT') else None
             request = urllib.request.Request(
                 playout.generator_url + path, data=payload, method=self.command,
                 headers={'Content-Type': self.headers.get('Content-Type', 'application/json')},
@@ -373,6 +390,12 @@ def handler_for(playout):
                 super().do_GET()
 
         def do_POST(self):
+            self.proxy()
+
+        def do_PUT(self):
+            self.proxy()
+
+        def do_DELETE(self):
             self.proxy()
 
     return Handler

@@ -3,4 +3,6 @@
 !playout/**
 !web/
 !web/**
+!mcp/
+!mcp/**
 **/__pycache__/

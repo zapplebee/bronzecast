@@ -39,3 +39,7 @@ jobs:
         run: |
           pip install -r playout/requirements.txt
           python -m unittest playout.test_server
+      - name: MCP OAuth and tool tests
+        run: |
+          pip install -r mcp/requirements.txt
+          python -m unittest mcp.test_server
