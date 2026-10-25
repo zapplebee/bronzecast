@@ -13,6 +13,7 @@ class Settings:
     access_keys: tuple = ()
     generator_url: str = "http://127.0.0.1:8081"
     playout_url: str = "http://127.0.0.1:8080"
+    tsx_api_url: str = "http://127.0.0.1:8091"
     access_ttl: int = 3600
     refresh_ttl: int = 2592000
     code_ttl: int = 60
@@ -36,6 +37,7 @@ class Settings:
             access_keys=_keys(raw_keys),
             generator_url=os.getenv("GENERATOR_URL", cls.generator_url).rstrip("/"),
             playout_url=os.getenv("PLAYOUT_URL", cls.playout_url).rstrip("/"),
+            tsx_api_url=os.getenv("BRONZECAST_TSX_API_URL", cls.tsx_api_url).rstrip("/"),
             access_ttl=int(os.getenv("MCP_ACCESS_TTL", cls.access_ttl)),
             refresh_ttl=int(os.getenv("MCP_REFRESH_TTL", cls.refresh_ttl)),
             code_ttl=int(os.getenv("MCP_CODE_TTL", cls.code_ttl)),

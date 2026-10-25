@@ -47,6 +47,7 @@ services:
       BRONZECAST_MCP_ACCESS_KEYS: "${BRONZECAST_MCP_ACCESS_KEYS:?set BRONZECAST_MCP_ACCESS_KEYS in .env}"
       GENERATOR_URL: "${GENERATOR_URL:-http://192.168.1.223:8081}"
       PLAYOUT_URL: "http://playout:8080"
+      BRONZECAST_TSX_API_URL: "${BRONZECAST_TSX_API_URL:-http://bronzecast-chromium:8091}"
       MCP_DB: "/data/mcp.sqlite3"
     volumes:
       - mcp-data:/data

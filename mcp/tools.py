@@ -317,6 +317,130 @@ TOOLS = [
         },
     },
     {
+        "name": "bronzecast_tsx_list_stickers",
+        "title": "List TSX stickers",
+        "description": (
+            "List custom React/TSX stickers with their editable state schema, "
+            "current shared state, and placement."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        "annotations": {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    },
+    {
+        "name": "bronzecast_tsx_get_sticker",
+        "title": "Get TSX sticker state",
+        "description": "Read a TSX sticker's editableProps schema and current backend-owned state.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "integer", "minimum": 1}},
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        "annotations": {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    },
+    {
+        "name": "bronzecast_tsx_create_sticker",
+        "title": "Create TSX sticker",
+        "description": (
+            "Create a custom React/TSX sticker. Export editableProps from the "
+            "component module. The app registers the schema and passes the current "
+            "shared snapshot as the component's state prop. initial_state, if supplied, "
+            "is the complete initial state object."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tsx": {"type": "string", "maxLength": 65536},
+                "x": {"type": "number", "minimum": 0, "maximum": 960},
+                "y": {"type": "number", "minimum": 0, "maximum": 540},
+                "angle": {"type": "number"},
+                "initial_state": {"type": "object", "additionalProperties": True},
+            },
+            "required": ["tsx", "x", "y"],
+            "additionalProperties": False,
+        },
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+    },
+    {
+        "name": "bronzecast_tsx_update_sticker",
+        "title": "Update TSX sticker",
+        "description": "Replace a TSX component or change its placement. Use bronzecast_tsx_set_sticker_state to change editable values.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "minimum": 1},
+                "tsx": {"type": "string", "maxLength": 65536},
+                "x": {"type": "number", "minimum": 0, "maximum": 960},
+                "y": {"type": "number", "minimum": 0, "maximum": 540},
+                "angle": {"type": "number"},
+            },
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    },
+    {
+        "name": "bronzecast_tsx_set_sticker_state",
+        "title": "Replace TSX sticker state",
+        "description": "Replace the complete editable state object. Keys and value types must match editableProps; state is shared with every renderer/client.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "minimum": 1},
+                "state": {"type": "object", "additionalProperties": True},
+            },
+            "required": ["id", "state"],
+            "additionalProperties": False,
+        },
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    },
+    {
+        "name": "bronzecast_tsx_remove_sticker",
+        "title": "Remove TSX sticker",
+        "description": "Remove a custom TSX sticker and its persisted shared state.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "integer", "minimum": 1}},
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    },
+    {
         "name": "bronzecast_stream_status",
         "title": "Stream status",
         "description": (
@@ -342,6 +466,10 @@ WRITE_TOOLS = {
     "bronzecast_add_sticker",
     "bronzecast_update_sticker",
     "bronzecast_remove_sticker",
+    "bronzecast_tsx_create_sticker",
+    "bronzecast_tsx_update_sticker",
+    "bronzecast_tsx_set_sticker_state",
+    "bronzecast_tsx_remove_sticker",
 }
 
 
@@ -409,6 +537,50 @@ def _angle(value):
     if not math.isfinite(value):
         raise ToolError("angle must be finite")
     return value
+
+
+def _tsx_source(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ToolError("tsx must be a non-empty component source string")
+    if len(value.encode("utf-8")) > 65536:
+        raise ToolError("tsx must be 64 KiB or smaller")
+    if "export default" not in value:
+        raise ToolError("tsx must default-export its React component")
+    return value
+
+
+def _tsx_state(value, name="state"):
+    if not isinstance(value, dict):
+        raise ToolError(f"{name} must be a JSON object containing the complete state")
+    try:
+        json.dumps(value, allow_nan=False)
+    except (TypeError, ValueError) as error:
+        raise ToolError(f"{name} must contain only JSON values: {error}") from error
+    return value
+
+
+def _tsx_sticker_summary(sticker):
+    return {
+        key: sticker[key]
+        for key in (
+            "id", "x", "y", "angle", "schemaRegistered", "editableProps",
+            "state", "createdAt", "updatedAt",
+        )
+        if key in sticker
+    }
+
+
+async def _wait_for_tsx_schema(settings, sticker_id, timeout=5.0):
+    deadline = asyncio.get_running_loop().time() + timeout
+    latest = None
+    while asyncio.get_running_loop().time() < deadline:
+        latest = await _json(
+            "GET", settings.tsx_api_url + f"/api/stickers/{sticker_id}"
+        )
+        if latest.get("schemaRegistered") is True:
+            return latest
+        await asyncio.sleep(0.1)
+    return latest
 
 
 def _sticker_text(value, name="text", maximum=160, required=True, newlines=False):
@@ -675,6 +847,64 @@ async def call_tool(name, arguments, settings):
 
     if name == "bronzecast_list_characters":
         return {"content": [{"type": "text", "text": _text(await _json("GET", settings.generator_url + "/api/character"))}]}
+
+    if name == "bronzecast_tsx_list_stickers":
+        stickers = await _json("GET", settings.tsx_api_url + "/api/stickers")
+        return {"content": [{"type": "text", "text": _text([_tsx_sticker_summary(item) for item in stickers])}]}
+
+    if name == "bronzecast_tsx_get_sticker":
+        sticker_id = _sticker_id(arguments)
+        sticker = await _json("GET", settings.tsx_api_url + f"/api/stickers/{sticker_id}")
+        return {"content": [{"type": "text", "text": _text(_tsx_sticker_summary(sticker))}]}
+
+    if name == "bronzecast_tsx_create_sticker":
+        tsx = _tsx_source(arguments.get("tsx"))
+        x = _coordinate(arguments, "x", 960)
+        y = _coordinate(arguments, "y", 540)
+        angle = _angle(arguments.get("angle", 0))
+        payload = {"tsx": tsx, "x": x, "y": y, "angle": angle}
+        if "initial_state" in arguments:
+            payload["initialState"] = _tsx_state(arguments["initial_state"], "initial_state")
+        sticker = await _json("POST", settings.tsx_api_url + "/api/stickers", payload)
+        sticker_id = sticker["id"]
+        sticker = await _wait_for_tsx_schema(settings, sticker_id)
+        summary = _tsx_sticker_summary(sticker)
+        summary["schemaPending"] = sticker.get("schemaRegistered") is not True
+        return {"content": [{"type": "text", "text": _text(summary)}]}
+
+    if name == "bronzecast_tsx_update_sticker":
+        sticker_id = _sticker_id(arguments)
+        payload = {}
+        if "tsx" in arguments:
+            payload["tsx"] = _tsx_source(arguments["tsx"])
+        for field, maximum in (("x", 960), ("y", 540)):
+            if field in arguments:
+                payload[field] = _coordinate(arguments, field, maximum)
+        if "angle" in arguments:
+            payload["angle"] = _angle(arguments["angle"])
+        if not payload:
+            raise ToolError("provide at least one of tsx, x, y, or angle")
+        sticker = await _json(
+            "PATCH", settings.tsx_api_url + f"/api/stickers/{sticker_id}", payload
+        )
+        if "tsx" in payload:
+            sticker = await _wait_for_tsx_schema(settings, sticker_id)
+        return {"content": [{"type": "text", "text": _text(_tsx_sticker_summary(sticker))}]}
+
+    if name == "bronzecast_tsx_set_sticker_state":
+        sticker_id = _sticker_id(arguments)
+        state = _tsx_state(arguments.get("state"))
+        sticker = await _json(
+            "PUT",
+            settings.tsx_api_url + f"/api/stickers/{sticker_id}/state",
+            state,
+        )
+        return {"content": [{"type": "text", "text": _text(_tsx_sticker_summary(sticker))}]}
+
+    if name == "bronzecast_tsx_remove_sticker":
+        sticker_id = _sticker_id(arguments)
+        await _json("DELETE", settings.tsx_api_url + f"/api/stickers/{sticker_id}")
+        return {"content": [{"type": "text", "text": f"TSX sticker {sticker_id} removed."}]}
 
     if name == "bronzecast_list_stickers":
         return {

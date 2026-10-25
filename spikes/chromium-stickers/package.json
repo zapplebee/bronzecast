@@ -1,0 +1,23 @@
+{
+  "name": "bronzecast-chromium-sticker-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/server.ts",
+    "dev": "bun --hot src/server.ts",
+    "mcp": "bun src/mcp.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "esbuild": "^0.25.5",
+    "playwright-core": "^1.55.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "three": "^0.186.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9"
+  }
+}

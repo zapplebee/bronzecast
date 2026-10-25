@@ -34,6 +34,7 @@ class MCPTests(unittest.TestCase):
             access_keys=("sekret",),
             generator_url="http://generator.test",
             playout_url="http://playout.test",
+            tsx_api_url="http://tsx.test",
         )
         self.app = create_app(self.settings)
         self.client = TestClient(self.app, base_url="https://mcp.test")
@@ -157,6 +158,12 @@ class MCPTests(unittest.TestCase):
         self.assertIn("bronzecast_add_sticker", names)
         self.assertIn("bronzecast_update_sticker", names)
         self.assertIn("bronzecast_remove_sticker", names)
+        self.assertIn("bronzecast_tsx_list_stickers", names)
+        self.assertIn("bronzecast_tsx_get_sticker", names)
+        self.assertIn("bronzecast_tsx_create_sticker", names)
+        self.assertIn("bronzecast_tsx_update_sticker", names)
+        self.assertIn("bronzecast_tsx_set_sticker_state", names)
+        self.assertIn("bronzecast_tsx_remove_sticker", names)
         self.assertFalse(any("open_item" in name or name.endswith("_timer") for name in names))
         add_tool = next(
             tool for tool in listed.json()["result"]["tools"]
@@ -472,6 +479,93 @@ class MCPTests(unittest.TestCase):
                 "http://generator.test/api/stickers",
                 {"kind": "timer", "appearance": "pumpkin_pie", "x": 20, "y": 20, "duration_seconds": 1200},
             ),
+            calls,
+        )
+
+    def test_tsx_tools_create_component_and_replace_whole_shared_state(self):
+        _, tokens = self.tokens()
+        calls = []
+        component = (
+            "export const editableProps = { complete: { type: 'boolean', default: false } }; "
+            "export default function Todo({state}) { return <div>{state.complete ? 'DONE' : 'OPEN'}</div> }"
+        )
+        record = {
+            "id": 41,
+            "tsx": component,
+            "x": 40,
+            "y": 60,
+            "angle": 0,
+            "schemaRegistered": True,
+            "editableProps": {"complete": {"type": "boolean", "default": False}},
+            "state": {"complete": False},
+        }
+
+        async def fake_json(method, url, payload=None):
+            calls.append((method, url, payload))
+            if method == "POST" and url == "http://tsx.test/api/stickers":
+                return {**record, "schemaRegistered": False, "state": payload.get("initialState", {})}
+            if method == "GET" and url == "http://tsx.test/api/stickers/41":
+                return record
+            if method == "PUT" and url == "http://tsx.test/api/stickers/41/state":
+                record["state"] = payload
+                return record
+            if method == "GET" and url == "http://tsx.test/api/stickers":
+                return [record]
+            return {}
+
+        with patch("mcp.tools._json", fake_json):
+            created = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "bronzecast_tsx_create_sticker",
+                        "arguments": {
+                            "tsx": component,
+                            "x": 40,
+                            "y": 60,
+                            "initial_state": {"complete": False},
+                        },
+                    },
+                },
+            )
+            self.assertFalse(created.json()["result"].get("isError", False))
+            created_value = json.loads(created.json()["result"]["content"][0]["text"])
+            self.assertEqual(created_value["id"], 41)
+            self.assertFalse(created_value["schemaPending"])
+
+            written = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "bronzecast_tsx_set_sticker_state",
+                        "arguments": {"id": 41, "state": {"complete": True}},
+                    },
+                },
+            )
+            self.assertFalse(written.json()["result"].get("isError", False))
+            written_value = json.loads(written.json()["result"]["content"][0]["text"])
+            self.assertEqual(written_value["state"], {"complete": True})
+
+        self.assertIn(
+            (
+                "POST",
+                "http://tsx.test/api/stickers",
+                {
+                    "tsx": component,
+                    "x": 40,
+                    "y": 60,
+                    "angle": 0,
+                    "initialState": {"complete": False},
+                },
+            ),
+            calls,
+        )
+        self.assertIn(
+            ("PUT", "http://tsx.test/api/stickers/41/state", {"complete": True}),
             calls,
         )
 

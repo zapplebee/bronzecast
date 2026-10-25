@@ -1,0 +1,44 @@
+services:
+  chromium-stickers:
+    build:
+      context: .
+      dockerfile: spikes/chromium-stickers/Dockerfile
+    image: bronzecast-chromium-stickers:latest
+    container_name: bronzecast-chromium
+    init: true
+    restart: unless-stopped
+    shm_size: 512mb
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8091"
+      CHROME_PATH: /usr/bin/chromium
+      CHROMIUM_ARGS: "--no-sandbox --disable-dev-shm-usage --enable-webgl --ignore-gpu-blocklist --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader"
+      UDP_HOST: bronzecast-playout
+      UDP_PORT: "5000"
+    volumes:
+      - ./spikes/chromium-stickers/state:/app/spikes/chromium-stickers/state
+    expose:
+      - "8091"
+    networks:
+      - nyx_svc_dev
+    depends_on:
+      - playout
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:8091/health').then(r => { if (!r.ok) process.exit(1) })",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+  mcp:
+    environment:
+      BRONZECAST_TSX_API_URL: "http://bronzecast-chromium:8091"
+networks:
+  nyx_svc_dev:
+    external: true
+    name: nyx_svc_dev

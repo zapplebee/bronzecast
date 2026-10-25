@@ -5,4 +5,12 @@
 !web/**
 !mcp/
 !mcp/**
+!characters/
+!characters/mog/
+!characters/mog/**
+!spikes/
+!spikes/chromium-stickers/
+!spikes/chromium-stickers/**
+spikes/chromium-stickers/node_modules/
+spikes/chromium-stickers/state/
 **/__pycache__/
