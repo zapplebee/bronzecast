@@ -65,10 +65,10 @@ kinds remain:
 Notifications remain a separate, ephemeral feed and are never persisted as
 stickers.
 
-The board shown in the reference image is the target composition _minus the fixed
-upper-right OPEN ITEM card_. A memo is an ordinary agent-created movable sticker,
-not a fixed dashboard panel. The space vacated by OPEN ITEM remains open; never
-seed or silently recreate a sticker there.
+The reference image shows the fruit sticker language to preserve, but not the
+fixed OPEN ITEM panel or the current dashboard chrome. Memos are ordinary
+agent-created movable stickers, not fixed dashboard panels. The board otherwise
+starts empty; never seed or silently recreate stickers.
 
 ### Goals
 
@@ -458,8 +458,8 @@ added.
 
 - Remove the fixed upper-right green OPEN ITEM panel, its border, header, content,
   and age marker; do not replace it with an empty placeholder.
-- Keep the status metrics, notification section, and notification ordering;
-  notification card styling is covered by
+- Keep notifications ephemeral and newest-first. Only the clock/date remain as
+  fixed dashboard text; notification cards and their layout are covered by
   [PLAN_GREEN_NOTIFICATIONS.md](PLAN_GREEN_NOTIFICATIONS.md).
 - Render stickers **after** notifications, so sticker art is frontmost as in the
   reference screenshot.

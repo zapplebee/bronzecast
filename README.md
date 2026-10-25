@@ -54,8 +54,8 @@ Invalid text lengths return `400`; malformed JSON/schema errors return `400`/`42
 `GET /api/notifications` returns the latest 32 notifications, newest first.
 History is in memory and resets on restart. The video shows the latest three
 cards on the right; long text is wrapped and visually truncated, while the API
-retains the full message. The green box above the character shows the newest
-title. Notifications are drawn **into the encoded video**, not just the web UI,
+retains the full message. Notification cards are drawn **into the encoded video**,
+not just the web UI,
 so the browser and Hub both receive them, with several seconds of HLS delay.
 Notification cards use a separate green-box identity from persistent fruit
 stickers; see [`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md).
@@ -108,13 +108,11 @@ MCP image content, inspect it, then adjust sticker coordinates or angle.
 
 ## Home dashboard
 
-The right-hand panel includes a large 12-hour clock with seconds, weekday/date,
-host-local UTC offset, time-of-day greeting, and day-progress bar. Compact tiles
-show renderer status, renderer uptime, and the number of retained notifications.
-Cards below show relative message ages. The clock uses the host computer's local
-time zone (including DST) and is encoded into the video, so its displayed time
-trails real time by the HLS playback delay. No external home-service accounts are
-needed for these readouts.
+The only fixed dashboard text is the host-local clock and date, positioned above
+Mog. The right side remains available for agent-created notification cards and
+stickers; no greeting, status tiles, message count, or empty-state text is drawn.
+The clock uses the host computer's local time zone (including DST) and is encoded
+into the video, so it trails real time by the HLS playback delay.
 
 ## Characters and live switching
 

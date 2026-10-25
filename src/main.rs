@@ -415,13 +415,7 @@ async fn main() {
         );
         gl_use_default_material();
         let sticker_views = sticker_store.snapshot();
-        notifications::draw(
-            &feed,
-            &sticker_views,
-            &sticker_layer,
-            t,
-            &character.spec.name,
-        );
+        notifications::draw(&feed, &sticker_views, &sticker_layer);
 
         set_default_camera();
         clear_background(BLACK);

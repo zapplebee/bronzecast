@@ -23,9 +23,10 @@ Run `cargo test --locked` and `cargo build --release --locked`. Verify a switch 
   `bronzecast.write` and the playout's `BRONZECAST_WRITE_KEY` gate. See `docs/MCP.md`.
 - HTTP handlers only request an active ID. GPU work belongs to the rendering
   thread. Models share lighting, animation, shadows, and the notification layout.
-- The character stays left; clock/dashboard/notifications stay right. Notifications
-  are baked into the video, not a browser-only overlay. Notifications are ephemeral
-  and in-memory; all durable board content is one sticker domain under
+- The character stays left; render the clock/date above it, with agent-created
+  notification cards and stickers on the right. Notifications are baked into the
+  video, not a browser-only overlay. They are ephemeral and in-memory; all durable
+  board content is one sticker domain under
   `BRONZECAST_STATE_DIR` (default `state/stickers.json`) and must survive renderer
   restarts. Stickers exist only when an agent creates them; every create supplies
   its own `x`/`y`, and stickers may be rotated with `angle`. The renderer must not
@@ -44,9 +45,10 @@ generic CRUD/API/MCP tools, arbitrary coordinates and rotation, and a read-only
 MCP snapshot image. Do not reintroduce the fixed open item, separate timer API,
 `reminder` kind, aliases, or runtime migrations.
 
-The upper-right area must remain empty unless an agent creates a memo there—do not
-create one automatically. The board starts with zero stickers. Notifications
-remain ephemeral and use the green-box rendering recorded in
+The sticker layer starts with zero stickers. Never create or position a default
+memo; agents supply placement for every create. Ephemeral green notification cards
+may appear at the top-right when agents send notifications. Their rendering is
+recorded in
 [`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md). Keep that
 visual identity separate from fruit stickers; update renderer, tests, README, and
 API docs together for future notification changes.

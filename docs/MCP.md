@@ -14,6 +14,10 @@ green-box visual identity documented in
 [`PLAN_GREEN_NOTIFICATIONS.md`](PLAN_GREEN_NOTIFICATIONS.md); it does not change
 these tools.
 
+The rendered board has only fixed clock/date text above the character. The right
+side contains agent-created notification cards and stickers; no fixed greeting,
+status tiles, section heading, or empty-state copy is rendered.
+
 ```
 MCP client ──HTTPS──> Traefik ──> mcp:8090 ──HTTP──> generator:8081
                           │                    └──> playout:8080/health
