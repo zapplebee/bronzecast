@@ -358,8 +358,9 @@ TOOLS = [
         "description": (
             "Create a custom React/TSX sticker. Export editableProps from the "
             "component module. The app registers the schema and passes the current "
-            "shared snapshot as the component's state prop. initial_state, if supplied, "
-            "is the complete initial state object."
+            "shared snapshot as the component's state prop. Time-driven components "
+            "may import useAnimationFrame from @bronzecast/sticker-runtime. "
+            "initial_state, if supplied, is the complete initial state object."
         ),
         "inputSchema": {
             "type": "object",

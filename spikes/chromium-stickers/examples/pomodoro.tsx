@@ -1,24 +1,27 @@
+import { useAnimationFrame } from "@bronzecast/sticker-runtime";
+
 export const editableProps = {
-  currentDate: { type: "number", default: 0 },
   cycleStartedAt: { type: "number", default: 0 },
+  focusMinutes: { type: "number", default: 25 },
+  breakMinutes: { type: "number", default: 5 },
 } as const;
 
 type Props = {
   state: {
-    currentDate: number;
     cycleStartedAt: number;
+    focusMinutes: number;
+    breakMinutes: number;
   };
 };
 
-const MINUTE = 60_000;
-const FOCUS_LENGTH = 25 * MINUTE;
-const BREAK_LENGTH = 5 * MINUTE;
-const CYCLE_LENGTH = FOCUS_LENGTH + BREAK_LENGTH;
-
 export default function Pomodoro({ state }: Props) {
-  const position = ((state.currentDate - state.cycleStartedAt) % CYCLE_LENGTH + CYCLE_LENGTH) % CYCLE_LENGTH;
-  const focusing = position < FOCUS_LENGTH;
-  const remaining = Math.max(0, Math.ceil(((focusing ? FOCUS_LENGTH : CYCLE_LENGTH) - position) / 1000));
+  const now = useAnimationFrame();
+  const focusLength = Math.max(1, state.focusMinutes) * 60_000;
+  const breakLength = Math.max(1, state.breakMinutes) * 60_000;
+  const cycleLength = focusLength + breakLength;
+  const position = ((now - state.cycleStartedAt) % cycleLength + cycleLength) % cycleLength;
+  const focusing = position < focusLength;
+  const remaining = Math.max(0, Math.ceil(((focusing ? focusLength : cycleLength) - position) / 1000));
   const time = `${Math.floor(remaining / 60).toString().padStart(2, "0")}:${(remaining % 60).toString().padStart(2, "0")}`;
   const label = focusing ? "FOCUS" : "BREAK";
 

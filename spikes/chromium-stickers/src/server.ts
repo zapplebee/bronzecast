@@ -43,6 +43,8 @@ let browser: Browser | undefined;
 let capturePage: Page | undefined;
 let ffmpeg: ReturnType<typeof Bun.spawn> | undefined;
 let stopping = false;
+let saveSequence = 0;
+let saveQueue: Promise<void> = Promise.resolve();
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const error = (message: string, status = 400) => json({ error: message }, status);
@@ -54,10 +56,14 @@ function sourceHash(source: string) {
 }
 
 async function saveState() {
-  await mkdir(STATE_DIR, { recursive: true });
-  const temp = `${STATE_FILE}.tmp`;
-  await writeFile(temp, JSON.stringify({ version: 3, stickers: [...stickers.values()] }, null, 2));
-  await rename(temp, STATE_FILE);
+  const write = saveQueue.then(async () => {
+    await mkdir(STATE_DIR, { recursive: true });
+    const temp = `${STATE_FILE}.${process.pid}.${++saveSequence}.tmp`;
+    await writeFile(temp, JSON.stringify({ version: 3, stickers: [...stickers.values()] }, null, 2));
+    await rename(temp, STATE_FILE);
+  });
+  saveQueue = write.catch(() => {});
+  await write;
 }
 
 async function loadState() {
@@ -91,7 +97,11 @@ async function compileTsx(tsx: string) {
   if (Buffer.byteLength(tsx, "utf8") > 64 * 1024) throw new Error("tsx must be 64 KiB or smaller");
   if (!/\bexport\s+default\b/.test(tsx)) throw new Error("tsx must have a default-exported React component");
   const imports = [...tsx.matchAll(/\b(?:from\s*|import\s*)["']([^"']+)["']/g)].map((match) => match[1]);
-  const unsupported = imports.filter((name) => !["react", "react/jsx-runtime"].includes(name));
+  const unsupported = imports.filter((name) => ![
+    "react",
+    "react/jsx-runtime",
+    "@bronzecast/sticker-runtime",
+  ].includes(name));
   if (unsupported.length) throw new Error(`Only React imports are supported in this spike: ${unsupported.join(", ")}`);
   return (await transform(tsx, {
     loader: "tsx",
@@ -197,7 +207,7 @@ const html = `<!doctype html>
 .error{max-width:420px;max-height:180px;overflow:hidden;padding:8px;color:#fff;background:#8b1616;font:12px monospace}
 .api-error{position:absolute;left:8px;bottom:8px;color:#ff8c8c;font:12px monospace}
 </style>
-<script type="importmap">{"imports":{"react":"/vendor/runtime.js","react-dom/client":"/vendor/runtime.js","react/jsx-runtime":"/vendor/runtime.js","react/jsx-dev-runtime":"/vendor/runtime.js"}}</script>
+<script type="importmap">{"imports":{"react":"/vendor/runtime.js","react-dom/client":"/vendor/runtime.js","react/jsx-runtime":"/vendor/runtime.js","react/jsx-dev-runtime":"/vendor/runtime.js","@bronzecast/sticker-runtime":"/vendor/runtime.js"}}</script>
 </head><body><div id="root"></div><script type="module" src="/app.js"></script></body></html>`;
 
 function stickerRoute(path: string) {
@@ -274,13 +284,20 @@ const server = Bun.serve({
         if (!isObject(body)) throw new Error("body must be a JSON object");
         const editableProps = normalizeEditableProps(body.editableProps ?? {});
         const unsupportedState = Object.keys(current.state).filter((name) => !(name in editableProps));
-        if (unsupportedState.length) throw new Error(`initialState contains undeclared fields: ${unsupportedState.join(", ")}`);
+        if (!current.schemaRegistered && unsupportedState.length) {
+          throw new Error(`initialState contains undeclared fields: ${unsupportedState.join(", ")}`);
+        }
         const state: Record<string, unknown> = {};
         for (const [name, definition] of Object.entries(editableProps)) {
           const oldValue = current.state[name];
           if (name in current.state) {
-            if (!validValue(definition.type, oldValue)) throw new Error(`state.${name} must be a ${definition.type}`);
-            state[name] = oldValue;
+            if (validValue(definition.type, oldValue)) {
+              state[name] = oldValue;
+            } else if (current.schemaRegistered) {
+              state[name] = definition.default;
+            } else {
+              throw new Error(`initialState.${name} must be a ${definition.type}`);
+            }
           } else {
             state[name] = definition.default;
           }

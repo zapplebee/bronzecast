@@ -63,6 +63,11 @@ export default function Todo({ state }: { state: { complete: boolean } }) {
 }
 ```
 
+For time-driven visuals, components can import `useAnimationFrame` from
+`@bronzecast/sticker-runtime`. It reads the page's shared animation clock, so a
+timer can derive its display from backend-owned values such as `cycleStartedAt`
+without the agent writing state every frame.
+
 Create a sticker by sending its TSX source and placement, without embedding its
 editable state in the component call:
 

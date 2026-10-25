@@ -72,7 +72,7 @@ server.registerTool("get_sticker", {
 
 server.registerTool("create_sticker", {
   title: "Create TSX sticker",
-  description: "Create a self-contained React TSX sticker. Export editableProps from the component module; the rendered app registers its schema and supplies state. initialState, when provided, is the whole initial state object.",
+  description: "Create a self-contained React TSX sticker. Export editableProps from the module; the app registers its schema and supplies the shared state snapshot. Time-driven components can import useAnimationFrame from @bronzecast/sticker-runtime.",
   inputSchema: {
     tsx: z.string().min(1).max(64 * 1024),
     x: z.number().min(0).max(960),

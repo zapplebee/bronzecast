@@ -36,3 +36,4 @@ export const useTransition = React.useTransition;
 export { createRoot } from "react-dom/client";
 export { jsx, jsxs } from "react/jsx-runtime";
 export { jsxDEV } from "react/jsx-dev-runtime";
+export { useAnimationFrame } from "../useAnimationFrame";

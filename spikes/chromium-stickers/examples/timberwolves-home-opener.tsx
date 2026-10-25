@@ -1,17 +1,16 @@
+import { useAnimationFrame } from "@bronzecast/sticker-runtime";
+
 export const editableProps = {
-  currentDate: { type: "number", default: 0 },
   countdownTil: { type: "number", default: 0 },
 } as const;
 
 type Props = {
-  state: {
-    currentDate: number;
-    countdownTil: number;
-  };
+  state: { countdownTil: number };
 };
 
 export default function TimberwolvesHomeOpener({ state }: Props) {
-  const remaining = Math.max(0, state.countdownTil - state.currentDate);
+  const now = useAnimationFrame();
+  const remaining = Math.max(0, state.countdownTil - now);
   const days = Math.floor(remaining / 86_400_000);
   const hours = Math.floor((remaining % 86_400_000) / 3_600_000);
   const minutes = Math.floor((remaining % 3_600_000) / 60_000);

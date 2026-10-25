@@ -1,14 +1,10 @@
+import { useAnimationFrame } from "@bronzecast/sticker-runtime";
+
 export const editableProps = {
-  currentDate: { type: "number", default: 0 },
   countdownTil: { type: "number", default: 0 },
 } as const;
 
-type Props = {
-  state: {
-    currentDate: number;
-    countdownTil: number;
-  };
-};
+type Props = { state: { countdownTil: number } };
 
 function calendarDay(timestamp: number) {
   const date = new Date(timestamp);
@@ -16,7 +12,8 @@ function calendarDay(timestamp: number) {
 }
 
 export default function HalloweenCountdown({ state }: Props) {
-  const days = Math.max(0, Math.round((calendarDay(state.countdownTil) - calendarDay(state.currentDate)) / 86_400_000));
+  const now = useAnimationFrame();
+  const days = Math.max(0, Math.round((calendarDay(state.countdownTil) - calendarDay(now)) / 86_400_000));
   const headline = days === 0 ? "TODAY" : `${days} ${days === 1 ? "DAY" : "DAYS"}`;
 
   return (

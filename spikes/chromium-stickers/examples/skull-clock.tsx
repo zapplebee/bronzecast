@@ -1,14 +1,17 @@
+import { useAnimationFrame } from "@bronzecast/sticker-runtime";
+
 export const editableProps = {
-  currentDate: { type: "number", default: 0 },
+  timeZone: { type: "string", default: "America/Chicago" },
 } as const;
 
-type Props = { state: { currentDate: number } };
+type Props = { state: { timeZone: string } };
 
 export default function SkullClock({ state }: Props) {
-  const date = new Date(state.currentDate);
+  const date = new Date(useAnimationFrame());
   const time = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
+    timeZone: state.timeZone,
   }).format(date);
 
   return (
