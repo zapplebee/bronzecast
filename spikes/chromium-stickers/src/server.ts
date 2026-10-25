@@ -430,8 +430,10 @@ async function startCapture() {
     "-map", "0:v:0", "-map", "1:a:0",
     "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
     "-r", String(FPS), "-pix_fmt", "yuv420p", "-g", String(FPS), "-keyint_min", String(FPS),
-    "-bf", "0", "-x264-params", "repeat-headers=1",
+    "-bf", "0", "-sc_threshold", "0", "-x264-params", "repeat-headers=1",
     "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-ac", "2",
+    "-shortest", "-mpegts_flags", "+resend_headers+initial_discontinuity",
+    "-muxdelay", "0", "-muxpreload", "0", "-flush_packets", "1",
     "-f", "mpegts", `udp://${UDP_HOST}:${UDP_PORT}?pkt_size=1316`,
   ], { stdin: "pipe", stdout: "ignore", stderr: "inherit" });
   ffmpeg = encoder;
