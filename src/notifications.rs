@@ -251,52 +251,25 @@ pub fn draw(
         draw_text(value, x + 12.0, 218.0, 19.0, green);
     }
     draw_text("NOTIFICATIONS / NEWEST FIRST", 476.0, 253.0, 13.0, green);
-    let cards = [
-        (
-            Color::from_rgba(255, 222, 190, 255),
-            Color::from_rgba(255, 166, 72, 255),
-        ),
-        (
-            Color::from_rgba(255, 238, 150, 255),
-            Color::from_rgba(255, 214, 72, 255),
-        ),
-        (
-            Color::from_rgba(210, 242, 200, 255),
-            Color::from_rgba(145, 205, 106, 255),
-        ),
-    ];
     if entries.is_empty() {
-        crate::sticker_art::sticker_card(470.0, 278.0, 460.0, 84.0, cards[0].0);
-        crate::sticker_art::mini_fruit(506.0, 320.0, 24.0, cards[0].1);
         draw_text(
-            "ALL QUIET",
-            546.0,
-            306.0,
-            14.0,
-            crate::sticker_art::muted_ink(),
-        );
-        draw_text(
-            "Your host is on watch.",
-            546.0,
-            334.0,
+            "All quiet. Your host is on watch.",
+            476.0,
+            308.0,
             20.0,
-            crate::sticker_art::ink(),
+            ivory,
         );
-        draw_text(
-            "POST /api/notifications",
-            546.0,
-            352.0,
-            13.0,
-            crate::sticker_art::muted_ink(),
-        );
+        draw_text("POST /api/notifications", 476.0, 337.0, 16.0, muted);
     }
     for (i, entry) in entries.iter().enumerate() {
-        let (fill, fruit) = cards[i % cards.len()];
-        let y = 267.0 + i as f32 * 84.0;
-        crate::sticker_art::sticker_card(470.0, y, 460.0, 76.0, fill);
-        crate::sticker_art::mini_fruit(504.0, y + 38.0, 21.0, fruit);
-        let title = wrap(&entry.title, 330.0, 17, 1);
-        draw_text(&title[0], 540.0, y + 27.0, 17.0, crate::sticker_art::ink());
+        let y = 267.0 + i as f32 * 82.0;
+        let fill = Color::from_rgba(4, 12, 7, 245);
+        let pale = Color::from_rgba(183, 198, 165, 255);
+        draw_rectangle(470.0, y, 460.0, 75.0, fill);
+        draw_rectangle_lines(470.0, y, 460.0, 75.0, 1.0, muted);
+        draw_rectangle(470.0, y, 3.0, 75.0, green);
+        let title = wrap(&entry.title, 340.0, 17, 1);
+        draw_text(&title[0], 486.0, y + 22.0, 17.0, green);
         let age = (now.timestamp().max(0) as u64).saturating_sub(entry.created_at);
         let age_label = if age < 60 {
             "now".to_owned()
@@ -307,21 +280,9 @@ pub fn draw(
         } else {
             format!("{}d", age / 86400)
         };
-        draw_text(
-            &age_label,
-            878.0,
-            y + 27.0,
-            13.0,
-            crate::sticker_art::muted_ink(),
-        );
-        for (j, line) in wrap(&entry.message, 330.0, 15, 2).iter().enumerate() {
-            draw_text(
-                line,
-                540.0,
-                y + 50.0 + j as f32 * 18.0,
-                15.0,
-                Color::from_rgba(92, 78, 62, 255),
-            );
+        draw_text(&age_label, 878.0, y + 22.0, 13.0, muted);
+        for (j, line) in wrap(&entry.message, 428.0, 16, 2).iter().enumerate() {
+            draw_text(line, 486.0, y + 43.0 + j as f32 * 18.0, 16.0, pale);
         }
     }
     draw_text("BRONZECAST / LOCAL SIGNAL", 28.0, 522.0, 12.0, muted);

@@ -1,6 +1,6 @@
 # Plan: Restore green-box notifications
 
-Status: Proposed
+Status: Implemented and verified with an encoded live frame
 Scope: notification rendering only; can ship independently of sticker unification
 Related: [Unify stickers](PLAN_UNIFY_STICKERS.md), [README](../README.md)
 
@@ -62,7 +62,8 @@ geometry and widths.
 
 ## Implementation steps
 
-1. Edit `src/notifications.rs` only.
+1. Edit `src/notifications.rs`; remove the now-unused notification-only
+   `mini_fruit` helper from `src/sticker_art.rs` without changing sticker drawing.
 2. Delete the `cards` peach/lemon/mint palette.
 3. Delete the empty-state `sticker_card` and `mini_fruit` calls.
 4. Restore the empty-state text block.

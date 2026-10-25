@@ -60,52 +60,6 @@ pub(crate) fn sticker_card(x: f32, y: f32, width: f32, height: f32, fill: Color)
     draw_circle(x + width - radius, y + radius, radius, fill);
 }
 
-pub(crate) fn mini_fruit(cx: f32, cy: f32, radius: f32, fill: Color) {
-    draw_circle(cx + 2.0, cy + 3.0, radius + 3.0, shadow());
-    draw_circle(cx, cy, radius + 3.0, paper());
-    draw_circle(cx, cy, radius, fill);
-    draw_ellipse(
-        cx - radius * 0.35,
-        cy - radius * 0.35,
-        radius * 0.48,
-        radius * 0.28,
-        -20.0,
-        Color::new(1.0, 1.0, 1.0, 0.35),
-    );
-    draw_line(
-        cx + 1.0,
-        cy - radius * 0.8,
-        cx + 4.0,
-        cy - radius * 1.35,
-        3.0,
-        paper(),
-    );
-    draw_line(
-        cx + 1.0,
-        cy - radius * 0.8,
-        cx + 4.0,
-        cy - radius * 1.35,
-        1.5,
-        Color::from_rgba(92, 72, 48, 255),
-    );
-    draw_ellipse(
-        cx + radius * 0.58,
-        cy - radius * 1.04,
-        radius * 0.85,
-        radius * 0.35,
-        -25.0,
-        paper(),
-    );
-    draw_ellipse(
-        cx + radius * 0.58,
-        cy - radius * 1.04,
-        radius * 0.65,
-        radius * 0.2,
-        -25.0,
-        leaf_color(),
-    );
-}
-
 pub struct StickerLayer {
     target: RenderTarget,
 }

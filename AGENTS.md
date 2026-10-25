@@ -46,7 +46,7 @@ MCP snapshot image. Do not reintroduce the fixed open item, separate timer API,
 
 The upper-right area must remain empty unless an agent creates a memo there—do not
 create one automatically. The board starts with zero stickers. Notifications
-remain ephemeral and currently use fruit-card rendering. Before changing their visuals, read
-[`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md), which is
-still a plan; update the renderer, tests, README, and API docs together when
-implementing it.
+remain ephemeral and use the green-box rendering recorded in
+[`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md). Keep that
+visual identity separate from fruit stickers; update renderer, tests, README, and
+API docs together for future notification changes.

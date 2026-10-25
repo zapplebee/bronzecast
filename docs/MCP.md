@@ -9,9 +9,10 @@ The service never renders. It proxies reads and writes to the generator's
 control API and reads the playout encoder health, exactly like the web page.
 
 Sticker unification is implemented: the tool list below uses generic sticker
-operations and includes a rendered-board snapshot. The planned notification
-visual change in [`PLAN_GREEN_NOTIFICATIONS.md`](PLAN_GREEN_NOTIFICATIONS.md) is
-separate and does not change these tools.
+operations and includes a rendered-board snapshot. Notifications use a separate
+green-box visual identity documented in
+[`PLAN_GREEN_NOTIFICATIONS.md`](PLAN_GREEN_NOTIFICATIONS.md); it does not change
+these tools.
 
 ```
 MCP client ──HTTPS──> Traefik ──> mcp:8090 ──HTTP──> generator:8081

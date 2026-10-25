@@ -57,9 +57,8 @@ cards on the right; long text is wrapped and visually truncated, while the API
 retains the full message. The green box above the character shows the newest
 title. Notifications are drawn **into the encoded video**, not just the web UI,
 so the browser and Hub both receive them, with several seconds of HLS delay.
-The current notification cards use fruit styling; the planned return to green
-boxes is tracked separately in
-[`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md).
+Notification cards use a separate green-box identity from persistent fruit
+stickers; see [`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md).
 
 The public API is proxied to the renderer on port 8081. When the renderer is
 offline, character/notification APIs return 503 while the test-card video keeps

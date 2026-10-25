@@ -4,8 +4,8 @@ The host GPU renderer is a replaceable producer. Docker owns the long-running
 web player, output encoder, and HLS timeline.
 
 The proxy exposes the unified sticker routes and the read-only rendered snapshot.
-The remaining planned board change is notification styling; see
-[`PLAN_GREEN_NOTIFICATIONS.md`](PLAN_GREEN_NOTIFICATIONS.md).
+Notifications remain ephemeral and use green-box cards distinct from the fruit
+sticker layer; see [`PLAN_GREEN_NOTIFICATIONS.md`](PLAN_GREEN_NOTIFICATIONS.md).
 
 ```text
 Host: Rust renderer + FFmpeg sender
