@@ -3,9 +3,9 @@
 The host GPU renderer is a replaceable producer. Docker owns the long-running
 web player, output encoder, and HLS timeline.
 
-The proxy exposes the unified sticker routes and the read-only rendered snapshot.
-Notifications remain ephemeral and use green-box cards distinct from the fruit
-sticker layer; see [`PLAN_GREEN_NOTIFICATIONS.md`](PLAN_GREEN_NOTIFICATIONS.md).
+The proxy exposes unified sticker CRUD routes and the read-only rendered snapshot.
+Notification and clock behaviors use the same sticker API, persistent store, and
+chosen appearance list. Art stickers use custom SVG through the same API.
 
 ```text
 Host: Rust renderer + FFmpeg sender
@@ -54,21 +54,20 @@ itself; the host renderer does not need the container rebuilt.
 | `BRONZECAST_UDP_URL` (renderer env) | `udp://127.0.0.1:5000?pkt_size=1316` | Destination for MPEG-TS output; point to another host or service name later. |
 | `BRONZECAST_CONTROL_ADDR` (renderer env) | `0.0.0.0:8081` | Generator's HTTP control API. |
 | `BRONZECAST_AUDIO_FILE` (renderer env) | unset | Optional looping audio file; otherwise sends AAC silence. This provides audio input, not notification chimes/TTS. |
-| `BRONZECAST_STATE_DIR` (renderer env) | `state` | Where the persistent sticker store (`stickers.json`) lives. Stickers survive renderer restarts; notifications are in-memory. |
-| `GENERATOR_URL` (Compose env) | `http://host.docker.internal:8081` | API upstream for character, notification, sticker, and snapshot requests. |
+| `BRONZECAST_STATE_DIR` (renderer env) | `state` | Where the sticker store (`stickers.json`) lives. Stickers survive renderer restarts; notification stickers expire at their agent-supplied TTL. |
+| `GENERATOR_URL` (Compose env) | `http://host.docker.internal:8081` | API upstream for character, sticker, and snapshot requests. |
 | `BRONZECAST_WRITE_KEY` (playout env) | unset | When set, public `POST`/`PUT`/`PATCH`/`DELETE /api/*` requests must send it as `Authorization: Bearer <key>` or `X-Bronzecast-Key`. `GET`s stay public. |
 | `INPUT_TIMEOUT` (Compose env) | `1.5` seconds | Age of last decoded frame before showing the test card. |
 | `LOG_LEVEL` (Compose env) | `INFO` | Use `DEBUG` for input-decoder diagnostics; UDP read timeout while idle is normal. |
 
 Host endpoints remain `GET /api/characters`, `GET/POST /api/character`,
-`GET/POST /api/notifications`, `GET/POST /api/stickers`,
+`GET/POST /api/stickers`,
 `PATCH/DELETE /api/stickers/{id}`, and `GET /api/snapshot` on port **8080**,
 proxied to the generator on 8081. Snapshot returns the latest full renderer frame
 as `image/png`; it is read-only and requires no write key.
 While the generator is offline these return 503; the video remains available.
-Notification/character state still belongs to the generator and resets when it
-restarts. Stickers persist under `BRONZECAST_STATE_DIR`.
-Preserve wanted messages before restarting and repost afterward.
+Character selection resets to the default on renderer restart. Stickers persist
+under `BRONZECAST_STATE_DIR`; notification stickers remain until expiry.
 
 `GET /api/stream` reports `source` (`live` or `fallback`), decoded frame age,
 input generation, bounded audio buffer size, output frame count, and encoder

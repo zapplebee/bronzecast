@@ -22,33 +22,36 @@ Run `cargo test --locked` and `cargo build --release --locked`. Verify a switch 
   playout health; it must never render or own the stream. Keep its mutations behind
   `bronzecast.write` and the playout's `BRONZECAST_WRITE_KEY` gate. See `docs/MCP.md`.
 - HTTP handlers only request an active ID. GPU work belongs to the rendering
-  thread. Models share lighting, animation, shadows, and the notification layout.
-- The character stays left; render the clock/date above it, with agent-created
-  notification cards and stickers on the right. Notifications are baked into the
-  video, not a browser-only overlay. They are ephemeral and in-memory; all durable
-  board content is one sticker domain under
-  `BRONZECAST_STATE_DIR` (default `state/stickers.json`) and must survive renderer
-  restarts. Stickers exist only when an agent creates them; every create supplies
-  its own `x`/`y`, and stickers may be rotated with `angle`. The renderer must not
-  seed or position a default sticker.
+  thread. Models share lighting, animation, shadows, and the full-window scene.
+- Mog/character and its spotlight render across the whole 960×540 frame. Stickers
+  persist under `BRONZECAST_STATE_DIR` (default `state/stickers.json`). Fixed
+  clock/date UI and the separate notification feed are absent.
 - Preserve user-supplied source assets in `scratch/` and the original asset folders.
 - Light falloff uses horizontal-only coverage dithering, with different treatment
   for floor/model. Avoid fake dead pixels, vertical grids, or row displacement.
-- Restart loses in-memory notifications/selection. Preserve wanted message contents
-  before a restart and restore them; switches should not require restarting.
+- Restart loses the in-memory character selection. Stickers persist; notification
+  stickers remain until expiry. Character switches do not require restarting.
 
-## Sticker and notification contract
+## Stickers
 
-[`docs/PLAN_UNIFY_STICKERS.md`](docs/PLAN_UNIFY_STICKERS.md) records the implemented
-sticker contract: one persistent domain (`timer`, `countdown`, `todo`, `memo`),
-generic CRUD/API/MCP tools, arbitrary coordinates and rotation, and a read-only
-MCP snapshot image. Do not reintroduce the fixed open item, separate timer API,
-`reminder` kind, aliases, or runtime migrations.
+There is one persisted sticker domain (`BRONZECAST_STATE_DIR`, default
+`state/stickers.json`) and one generic REST/MCP CRUD surface. Its seven kinds are
+`timer`, `countdown`, `todo`, `memo`, `notification`, `clock`, and `art`.
 
-The sticker layer starts with zero stickers. Never create or position a default
-memo; agents supply placement for every create. Ephemeral green notification cards
-may appear at the top-right when agents send notifications. Their rendering is
-recorded in
-[`docs/PLAN_GREEN_NOTIFICATIONS.md`](docs/PLAN_GREEN_NOTIFICATIONS.md). Keep that
-visual identity separate from fruit stickers; update renderer, tests, README, and
-API docs together for future notification changes.
+- Six text-bearing kinds can use any of the 24 named preset appearances or
+  `custom_svg`. Art requires `custom_svg` and has no text overlay. SVG is inline,
+  at most 32 KiB, vector-only, and rendered locally; no external assets or embedded
+  images. BRONZECAST renders normal behavior text/controls over custom SVG artwork.
+- Every create supplies `kind`, `appearance`, `x`, and `y`; `angle` is optional.
+  There are no seeded or default stickers, and the renderer does not choose a
+  position. Preset motifs reserve a central 184×76 text-safe area.
+- Notifications require agent-supplied `expires_in_seconds`; API views return
+  `expires_at`, but the expiry is never drawn. Expired notifications are removed.
+  Clocks render host-local time/date. Neither has a separate feed or fixed UI.
+- Stickers persist across renderer restarts; notification stickers remain until
+  expiry. Keep storage at version 3 and avoid runtime migrations/legacy aliases.
+
+Do not reintroduce the fixed open item, separate timer/notification APIs or MCP
+tools, `reminder`/`note` kinds, aliases, or runtime migrations. Keep the board empty
+until agents create stickers. Update renderer, tests, `README.md`, `docs/MCP.md`,
+`docs/PLAYOUT.md`, and API descriptions together for future sticker changes.

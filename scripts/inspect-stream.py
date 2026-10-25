@@ -22,10 +22,10 @@ for index in range(8):
     time = index * 4
     ffmpeg('-ss', time, '-i', clip, '-frames:v', '1', output / f'frame-{index:02}.png')
     ffmpeg('-i', output / f'frame-{index:02}.png', '-vf',
-           'crop=440:420:0:120,scale=880:840:flags=neighbor',
-           '-frames:v', '1', output / f'character-{index:02}.png')
+           'scale=1920:1080:flags=neighbor',
+           '-frames:v', '1', output / f'scene-{index:02}.png')
     ffmpeg('-i', output / f'frame-{index:02}.png', '-vf',
-           'crop=440:140:0:400,scale=1320:420:flags=neighbor',
+           'crop=960:140:0:400,scale=1920:280:flags=neighbor',
            '-frames:v', '1', output / f'floor-{index:02}.png')
 ffmpeg('-framerate', '1', '-i', output / 'frame-%02d.png', '-vf',
        'scale=480:270:flags=neighbor,tile=4x2', '-frames:v', '1', output / 'contact-sheet.png')

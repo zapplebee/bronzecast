@@ -8,15 +8,10 @@ through DCR or CIMD without any manual client provisioning.
 The service never renders. It proxies reads and writes to the generator's
 control API and reads the playout encoder health, exactly like the web page.
 
-Sticker unification is implemented: the tool list below uses generic sticker
-operations and includes a rendered-board snapshot. Notifications use a separate
-green-box visual identity documented in
-[`PLAN_GREEN_NOTIFICATIONS.md`](PLAN_GREEN_NOTIFICATIONS.md); it does not change
-these tools.
-
-The rendered board has only fixed clock/date text above the character. The right
-side contains agent-created notification cards and stickers; no fixed greeting,
-status tiles, section heading, or empty-state copy is rendered.
+The tool list below uses generic sticker operations and includes a rendered-board
+snapshot. Notifications and clocks are agent-created sticker behaviors with the
+same appearance choices, placement, and CRUD operations. Current sticker kinds,
+appearances, and rendering rules are summarized in the project README.
 
 ```
 MCP client ──HTTPS──> Traefik ──> mcp:8090 ──HTTP──> generator:8081
@@ -75,38 +70,45 @@ must be `none`, and PKCE with `S256` is mandatory. There are no client secrets.
 
 | Tool | Scope | Effect |
 | --- | --- | --- |
-| `bronzecast_get_status` | read | Character, stickers, notifications, and stream health in one call. |
+| `bronzecast_get_status` | read | Character, stickers, and stream health in one call. |
 | `bronzecast_get_snapshot` | read | Latest complete 960×540 renderer frame as MCP `image/png` content. |
 | `bronzecast_list_characters` | read | Available characters plus active/requested ids. |
 | `bronzecast_switch_character` | write | `{id}`; applied on the next rendered frame. |
-| `bronzecast_list_notifications` | read | Current notification queue. |
-| `bronzecast_send_notification` | write | `{title?, message}`; 48/320 character limits. |
-| `bronzecast_clear_notifications` | write | Removes every notification. |
-| `bronzecast_list_stickers` | read | Every persistent sticker and its computed state. |
-| `bronzecast_add_sticker` | write | `{kind, x, y, angle?, title?, text?, target?, duration_seconds?, done?}`. Timer creation also requires `duration_seconds`. |
-| `bronzecast_update_sticker` | write | `{id, x?, y?, angle?, title?, text?, target?, done?, action?, duration_seconds?}`. |
+| `bronzecast_list_stickers` | read | Every sticker and its computed state, including notification `expires_at`. |
+| `bronzecast_add_sticker` | write | `{kind, appearance, x, y, angle?, title?, text?, target?, duration_seconds?, done?, expires_in_seconds?, svg?}`. Timers require duration; notifications require TTL; custom SVG requires `svg`. |
+| `bronzecast_update_sticker` | write | `{id, appearance?, x?, y?, angle?, title?, text?, target?, done?, action?, duration_seconds?, svg?}`. |
 | `bronzecast_remove_sticker` | write | `{id}`; deletes the sticker. |
 | `bronzecast_stream_status` | read | Playout source, frame age, encoder state. |
 
-Stickers are persistent, movable and rotatable cards rendered into the video.
-They live in versioned `stickers.json` under `BRONZECAST_STATE_DIR` and survive
-renderer restarts. A new store starts empty; the renderer never seeds a timer or
-any other sticker. `kind` is `timer`, `countdown`, `todo`, or `memo`. Each create
-requires agent-supplied `x` and `y`, the unrotated top-left in 960×540 board
-coordinates. `angle` is optional clockwise degrees around the sticker center.
-The renderer clamps rotated visual bounds to the canvas; there are no per-kind
-placement defaults.
+Stickers are movable and rotatable artwork rendered into the full-window video
+scene. They live in versioned `stickers.json` under `BRONZECAST_STATE_DIR` and
+survive renderer restarts. A new store starts empty; the renderer never seeds any
+sticker. `kind` is the behavior (`timer`, `countdown`, `todo`, `memo`,
+`notification`, `clock`, or `art`) and `appearance` selects one of 24 presets or
+`custom_svg`. Presets and custom SVG work with all six text-bearing kinds; `art`
+requires `custom_svg` and has no behavior overlay.
+The SVG is inline, capped at 32 KiB, and vector-only; text and embedded images are
+not supported. Custom SVG artwork for text-bearing kinds is displayed beneath the
+normal behavior content. Each create requires agent-supplied `x` and `y`, the unrotated
+top-left in 960×540 board coordinates. `angle` is optional clockwise degrees
+around the sticker center. The renderer clamps rotated visual bounds to the
+canvas; there are no position or appearance defaults. Every preset has a clear
+center for its behavior's text/controls, with no separate countdown banner. The
+behavior overlay is rendered directly on any selected appearance.
 
 Countdowns require a `YYYY-MM-DD` target and update automatically; todos have a
 completion flag; memos have a title and/or body with no completion state. Timers
 require an agent-supplied duration from 1–3600 seconds, are identified by sticker
 ID, and accept `action` (`start`, `pause`, `reset`, or `set`) through
-`bronzecast_update_sticker`. No open-item/timer aliases or runtime state
-migrations are present.
+`bronzecast_update_sticker`. Notifications require `expires_in_seconds` (1–604800)
+and return computed absolute `expires_at`; expiry is not rendered, and expired
+records are removed. Clocks show host-local time and date and have no content fields
+or expiry. The renderer does not add either kind automatically. No open-item/timer
+aliases or runtime state migrations are present.
 
 `bronzecast_get_snapshot` returns the latest complete 960×540 renderer frame as
 a standard MCP image content item containing base64 PNG data. It includes the
-character, dashboard, notifications, and stickers—not the playout fallback card.
+full-window character/spotlight scene and stickers—not the playout fallback card.
 Agents can pair it with `bronzecast_list_stickers`, adjust `x`, `y`, or `angle`,
 and inspect a fresh snapshot. Before the renderer publishes its first frame, the
 tool reports that the snapshot is unavailable.

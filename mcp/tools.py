@@ -11,7 +11,35 @@ import httpx
 TIMEOUT = 5.0
 CHARACTER_ID_RE = re.compile(r"^[^\s\x00-\x1f\x7f]{1,64}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-STICKER_KINDS = {"countdown", "timer", "todo", "memo"}
+STICKER_KINDS = {"countdown", "timer", "todo", "memo", "notification", "clock", "art"}
+STICKER_APPEARANCES = (
+    "jack_o_lantern",
+    "ghost",
+    "black_cat",
+    "bat",
+    "candy_pail",
+    "turkey",
+    "cornucopia",
+    "maple_leaf",
+    "pumpkin_pie",
+    "christmas_tree",
+    "wrapped_gift",
+    "snowman",
+    "reindeer",
+    "gingerbread_person",
+    "candy_cane",
+    "fireworks",
+    "lunar_new_year_lantern",
+    "diya",
+    "heart",
+    "easter_bunny",
+    "decorated_egg",
+    "tulip",
+    "sun",
+    "ice_cream_cone",
+    "custom_svg",
+)
+STICKER_APPEARANCE_SET = set(STICKER_APPEARANCES)
 
 
 class ToolError(Exception):
@@ -23,7 +51,7 @@ TOOLS = [
         "name": "bronzecast_get_status",
         "title": "Get dashboard status",
         "description": (
-            "Read the active character, persistent stickers, notification queue, "
+            "Read the active character, all stickers including expiring notifications, "
             "and live playout encoder state in one call."
         ),
         "inputSchema": {
@@ -103,75 +131,11 @@ TOOLS = [
         },
     },
     {
-        "name": "bronzecast_list_notifications",
-        "title": "List notifications",
-        "description": "Read the notifications currently shown on the dashboard.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-        "annotations": {
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": False,
-        },
-    },
-    {
-        "name": "bronzecast_send_notification",
-        "title": "Send notification",
-        "description": (
-            "Add a notification card to the live video. Titles are limited to 48 "
-            "characters and messages to 320; only newlines are allowed as "
-            "control characters."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string",
-                    "description": "Short heading; defaults to 'Notification'.",
-                    "maxLength": 48,
-                },
-                "message": {
-                    "type": "string",
-                    "description": "Body text, up to 320 characters.",
-                    "maxLength": 320,
-                },
-            },
-            "required": ["message"],
-            "additionalProperties": False,
-        },
-        "annotations": {
-            "readOnlyHint": False,
-            "destructiveHint": False,
-            "idempotentHint": False,
-            "openWorldHint": False,
-        },
-    },
-    {
-        "name": "bronzecast_clear_notifications",
-        "title": "Clear notifications",
-        "description": "Remove every notification from the live video dashboard.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-        "annotations": {
-            "readOnlyHint": False,
-            "destructiveHint": True,
-            "idempotentHint": True,
-            "openWorldHint": False,
-        },
-    },
-    {
         "name": "bronzecast_list_stickers",
         "title": "List stickers",
         "description": (
-            "Read every persistent sticker on the video board, including "
-            "countdowns, tomato timers, todos, and memos."
+            "Read every sticker, including appearance, behavior, and returned "
+            "expiry metadata for expiring notification stickers."
         ),
         "inputSchema": {
             "type": "object",
@@ -189,18 +153,24 @@ TOOLS = [
         "name": "bronzecast_add_sticker",
         "title": "Add sticker",
         "description": (
-            "Create an agent-controlled sticker at the supplied board x/y; there "
-            "are no seeded stickers or placement defaults. angle is optional "
-            "clockwise degrees. Use todo for completable tasks and memo for "
-            "information to keep visible. Countdowns need a YYYY-MM-DD target; "
-            "timers require an explicit duration_seconds."
+            "Create an agent-controlled sticker by choosing an appearance and "
+            "kind (timer, countdown, todo, memo, notification, clock, or art). "
+            "Supply x and y; there are no seeded stickers or placement defaults. "
+            "custom_svg requires inline vector SVG. Existing behavior kinds render "
+            "their usual content over that artwork; art is SVG-only. Notifications "
+            "require an expiry TTL; clocks display local time and date."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "kind": {
                     "type": "string",
-                    "enum": ["countdown", "timer", "todo", "memo"],
+                    "enum": ["countdown", "timer", "todo", "memo", "notification", "clock", "art"],
+                },
+                "appearance": {
+                    "type": "string",
+                    "enum": list(STICKER_APPEARANCES),
+                    "description": "One of 24 preset motifs, or custom_svg when supplying SVG artwork.",
                 },
                 "x": {
                     "type": "number",
@@ -221,12 +191,12 @@ TOOLS = [
                 "title": {
                     "type": "string",
                     "maxLength": 48,
-                    "description": "Optional memo title; memo requires title or text.",
+                    "description": "Optional memo or notification title; notification defaults to 'Notification'.",
                 },
                 "text": {
                     "type": "string",
-                    "maxLength": 160,
-                    "description": "Text for countdown, todo, or memo; countdown/todo require it.",
+                    "maxLength": 320,
+                    "description": "Text for countdown, todo, memo, or notification; countdown/todo/notification require it.",
                 },
                 "target": {
                     "type": "string",
@@ -242,8 +212,19 @@ TOOLS = [
                     "type": "boolean",
                     "description": "Initial todo completion state.",
                 },
+                "expires_in_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 604800,
+                    "description": "Required for notification stickers; expiry is hidden on the artwork.",
+                },
+                "svg": {
+                    "type": "string",
+                    "maxLength": 32768,
+                    "description": "Required with custom_svg; bounded vector SVG artwork, without text or embedded images.",
+                },
             },
-            "required": ["kind", "x", "y"],
+            "required": ["kind", "appearance", "x", "y"],
             "additionalProperties": False,
         },
         "annotations": {
@@ -257,10 +238,13 @@ TOOLS = [
         "name": "bronzecast_update_sticker",
         "title": "Update sticker",
         "description": (
-            "Move, rotate, or edit a sticker. x and y are unrotated top-left "
-            "board coordinates; angle is clockwise degrees. Timers accept "
+            "Change a sticker's appearance, move it, rotate it, or edit its "
+            "behavior. x/y are unrotated top-left board coordinates; angle is "
+            "clockwise degrees. Timers accept "
             "action (start, pause, reset, set); countdowns accept target; "
-            "todos accept done; memos accept title and text."
+            "todos accept done; memos and notifications accept title and text. "
+            "Clock and notification expiry are fixed at creation. SVG artwork can "
+            "be replaced on custom_svg stickers; art stickers have no text overlay."
         ),
         "inputSchema": {
             "type": "object",
@@ -270,11 +254,15 @@ TOOLS = [
                     "minimum": 1,
                     "description": "Sticker id from bronzecast_list_stickers.",
                 },
+                "appearance": {
+                    "type": "string",
+                    "enum": list(STICKER_APPEARANCES),
+                },
                 "x": {"type": "number", "minimum": 0, "maximum": 960},
                 "y": {"type": "number", "minimum": 0, "maximum": 540},
                 "angle": {"type": "number", "description": "Clockwise degrees around sticker center."},
                 "title": {"type": "string", "maxLength": 48},
-                "text": {"type": "string", "maxLength": 160},
+                "text": {"type": "string", "maxLength": 320},
                 "target": {
                     "type": "string",
                     "description": "New YYYY-MM-DD date for a countdown.",
@@ -288,6 +276,11 @@ TOOLS = [
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 3600,
+                },
+                "svg": {
+                    "type": "string",
+                    "maxLength": 32768,
+                    "description": "Replacement vector SVG for a custom_svg sticker.",
                 },
             },
             "required": ["id"],
@@ -346,8 +339,6 @@ TOOLS = [
 
 WRITE_TOOLS = {
     "bronzecast_switch_character",
-    "bronzecast_send_notification",
-    "bronzecast_clear_notifications",
     "bronzecast_add_sticker",
     "bronzecast_update_sticker",
     "bronzecast_remove_sticker",
@@ -394,28 +385,6 @@ async def _snapshot_png(url):
 
 def _control(char):
     return ord(char) < 32 or ord(char) == 127
-
-
-def _validate_notification(arguments):
-    title = arguments.get("title", "Notification")
-    message = arguments.get("message")
-    if not isinstance(title, str) or not isinstance(message, str):
-        raise ToolError("title and message must be strings")
-    title = title.strip()
-    message = message.strip()
-    if not title:
-        raise ToolError("title must not be empty")
-    if len(title) > 48:
-        raise ToolError("title must be 48 characters or fewer")
-    if not message:
-        raise ToolError("message must not be empty")
-    if len(message) > 320:
-        raise ToolError("message must be 320 characters or fewer")
-    if any(_control(char) for char in title):
-        raise ToolError("title must not contain control characters")
-    if any(char != "\n" and _control(char) for char in message):
-        raise ToolError("message only allows newlines as control characters")
-    return {"title": title, "message": message}
 
 
 def _sticker_id(arguments):
@@ -469,6 +438,24 @@ def _sticker_duration(value):
     return value
 
 
+def _sticker_ttl(value):
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ToolError("expires_in_seconds must be an integer")
+    if not 1 <= value <= 604800:
+        raise ToolError("expires_in_seconds must be between 1 and 604800")
+    return value
+
+
+def _sticker_svg(value):
+    if not isinstance(value, str):
+        raise ToolError("svg must be a string")
+    if len(value.encode("utf-8")) > 32 * 1024:
+        raise ToolError("svg must be 32768 bytes or fewer")
+    if "<svg" not in value:
+        raise ToolError("svg must contain an <svg> element")
+    return value
+
+
 def _sticker_date(value):
     if not isinstance(value, str) or not DATE_RE.fullmatch(value):
         raise ToolError("target must be a valid YYYY-MM-DD date")
@@ -481,15 +468,26 @@ def _sticker_date(value):
 
 def _validate_sticker_add(arguments):
     unknown = set(arguments) - {
-        "kind", "x", "y", "angle", "title", "text", "target",
-        "duration_seconds", "done",
+        "kind", "appearance", "x", "y", "angle", "title", "text",
+        "target", "duration_seconds", "done", "expires_in_seconds", "svg",
     }
     if unknown:
         raise ToolError(f"unknown sticker field: {sorted(unknown)[0]}")
     kind = arguments.get("kind")
     if kind not in STICKER_KINDS:
-        raise ToolError("kind must be countdown, timer, todo, or memo")
-    payload = {"kind": kind}
+        raise ToolError("kind must be countdown, timer, todo, memo, notification, clock, or art")
+    appearance = arguments.get("appearance")
+    if not isinstance(appearance, str) or appearance not in STICKER_APPEARANCE_SET:
+        raise ToolError("appearance must be selected from the available sticker appearance list")
+    payload = {"kind": kind, "appearance": appearance}
+    svg = None
+    if "svg" in arguments:
+        svg = _sticker_svg(arguments["svg"])
+        if appearance != "custom_svg":
+            raise ToolError("svg requires appearance 'custom_svg'")
+        payload["svg"] = svg
+    if appearance == "custom_svg" and svg is None:
+        raise ToolError("appearance 'custom_svg' requires svg artwork")
     for name, maximum in (("x", 960), ("y", 540)):
         if name not in arguments:
             raise ToolError(f"{name} is required")
@@ -500,21 +498,25 @@ def _validate_sticker_add(arguments):
         payload["title"] = _sticker_text(
             arguments["title"], name="title", maximum=48, required=False
         )
-    if "text" in arguments or kind in {"countdown", "todo"}:
+    if "text" in arguments or kind in {"countdown", "todo", "notification"}:
         payload["text"] = _sticker_text(
             arguments.get("text"),
-            required=kind in {"countdown", "todo"},
-            newlines=kind in {"todo", "memo"},
+            maximum=320 if kind == "notification" else 160,
+            required=kind in {"countdown", "todo", "notification"},
+            newlines=kind in {"todo", "memo", "notification"},
         )
     target = arguments.get("target")
     duration = arguments.get("duration_seconds")
     done = arguments.get("done")
+    ttl = arguments.get("expires_in_seconds")
     if target is not None and kind != "countdown":
         raise ToolError("target only applies to countdown stickers")
     if duration is not None and kind != "timer":
         raise ToolError("duration_seconds only applies to timer stickers")
     if done is not None and kind != "todo":
         raise ToolError("done only applies to todo stickers")
+    if "expires_in_seconds" in arguments and kind != "notification":
+        raise ToolError("expires_in_seconds only applies to notification stickers")
     if done is not None and not isinstance(done, bool):
         raise ToolError("done must be a boolean")
     if kind == "timer" and any(
@@ -533,6 +535,28 @@ def _validate_sticker_add(arguments):
         name in arguments for name in ("target", "duration_seconds", "done")
     ):
         raise ToolError("memo does not accept target, duration_seconds, or done")
+    if kind == "notification" and any(
+        name in arguments for name in ("target", "duration_seconds", "done")
+    ):
+        raise ToolError("notification does not accept target, duration_seconds, or done")
+    if kind == "clock" and any(
+        name in arguments
+        for name in (
+            "title", "text", "target", "duration_seconds", "done", "expires_in_seconds"
+        )
+    ):
+        raise ToolError("clock accepts only appearance, position, and angle")
+    if kind == "art":
+        if appearance != "custom_svg":
+            raise ToolError("art requires appearance 'custom_svg'")
+        if any(
+            name in arguments
+            for name in (
+                "title", "text", "target", "duration_seconds", "done",
+                "expires_in_seconds",
+            )
+        ):
+            raise ToolError("art stickers contain only SVG artwork, position, and angle")
     if kind == "countdown":
         if target is None:
             raise ToolError("countdown requires target (YYYY-MM-DD)")
@@ -547,17 +571,31 @@ def _validate_sticker_add(arguments):
     elif kind == "memo":
         if not payload.get("title", "").strip() and not payload.get("text", "").strip():
             raise ToolError("memo requires a non-empty title or text")
+    elif kind == "notification":
+        if "title" in payload and not payload["title"]:
+            raise ToolError("notification title must not be empty")
+        if ttl is None:
+            raise ToolError("notification requires expires_in_seconds")
+        payload["expires_in_seconds"] = _sticker_ttl(ttl)
     return payload
 
 
 def _validate_sticker_update(arguments):
     unknown = set(arguments) - {
-        "id", "x", "y", "angle", "title", "text", "target", "done",
-        "action", "duration_seconds",
+        "id", "appearance", "x", "y", "angle", "title", "text",
+        "target", "done", "action", "duration_seconds", "svg",
     }
     if unknown:
         raise ToolError(f"unknown sticker field: {sorted(unknown)[0]}")
     payload = {}
+    if "appearance" in arguments:
+        if not isinstance(arguments["appearance"], str) or arguments["appearance"] not in STICKER_APPEARANCE_SET:
+            raise ToolError("appearance must be selected from the available sticker appearance list")
+        payload["appearance"] = arguments["appearance"]
+    if "svg" in arguments:
+        payload["svg"] = _sticker_svg(arguments["svg"])
+        if "appearance" in arguments and arguments["appearance"] != "custom_svg":
+            raise ToolError("svg requires appearance 'custom_svg'")
     for name, maximum in (("x", 960), ("y", 540)):
         if name in arguments:
             payload[name] = _coordinate(arguments, name, maximum)
@@ -569,7 +607,7 @@ def _validate_sticker_update(arguments):
         )
     if "text" in arguments:
         payload["text"] = _sticker_text(
-            arguments["text"], required=False, newlines=True
+            arguments["text"], maximum=320, required=False, newlines=True
         )
     if "target" in arguments:
         payload["target"] = _sticker_date(arguments["target"])
@@ -599,9 +637,8 @@ def _text(value):
 
 
 async def _status_payload(settings):
-    character, notifications, stickers, stream = await asyncio.gather(
+    character, stickers, stream = await asyncio.gather(
         _json("GET", settings.generator_url + "/api/character"),
-        _json("GET", settings.generator_url + "/api/notifications"),
         _json("GET", settings.generator_url + "/api/stickers"),
         _json("GET", settings.playout_url + "/health"),
         return_exceptions=True,
@@ -609,12 +646,11 @@ async def _status_payload(settings):
     payload = {}
     for key, value in (
         ("character", character),
-        ("notifications", notifications),
         ("stickers", stickers),
         ("stream", stream),
     ):
         payload[key] = {"error": str(value)} if isinstance(value, Exception) else value
-    core_failed = isinstance(character, Exception) and isinstance(notifications, Exception)
+    core_failed = isinstance(character, Exception) and isinstance(stickers, Exception)
     return payload, core_failed
 
 
@@ -680,9 +716,6 @@ async def call_tool(name, arguments, settings):
     if name == "bronzecast_stream_status":
         return {"content": [{"type": "text", "text": _text(await _json("GET", settings.playout_url + "/health"))}]}
 
-    if name == "bronzecast_list_notifications":
-        return {"content": [{"type": "text", "text": _text(await _json("GET", settings.generator_url + "/api/notifications"))}]}
-
     if name == "bronzecast_switch_character":
         character_id = arguments.get("id")
         if not isinstance(character_id, str) or not CHARACTER_ID_RE.fullmatch(character_id):
@@ -693,17 +726,5 @@ async def call_tool(name, arguments, settings):
             {"id": character_id},
         )
         return {"content": [{"type": "text", "text": _text(result)}]}
-
-    if name == "bronzecast_send_notification":
-        result = await _json(
-            "POST",
-            settings.generator_url + "/api/notifications",
-            _validate_notification(arguments),
-        )
-        return {"content": [{"type": "text", "text": _text(result)}]}
-
-    if name == "bronzecast_clear_notifications":
-        await _json("DELETE", settings.generator_url + "/api/notifications")
-        return {"content": [{"type": "text", "text": "All notifications cleared."}]}
 
     raise ToolError(f"Unknown tool: {name}")

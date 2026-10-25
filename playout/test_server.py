@@ -67,6 +67,7 @@ class ProxyPathTests(unittest.TestCase):
         self.assertTrue(api_path_allowed('/api/snapshot'))
         self.assertFalse(api_path_allowed('/api/timer'))
         self.assertFalse(api_path_allowed('/api/open-item'))
+        self.assertFalse(api_path_allowed('/api/notifications'))
         self.assertFalse(api_path_allowed('/api/stickers-evil'))
         self.assertFalse(api_path_allowed('/api/private'))
 

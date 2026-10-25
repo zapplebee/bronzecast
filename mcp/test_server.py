@@ -149,13 +149,23 @@ class MCPTests(unittest.TestCase):
         listed = self.mcp(tokens["access_token"], {"id": 2, "method": "tools/list"})
         names = {tool["name"] for tool in listed.json()["result"]["tools"]}
         self.assertIn("bronzecast_switch_character", names)
-        self.assertIn("bronzecast_send_notification", names)
+        self.assertNotIn("bronzecast_send_notification", names)
+        self.assertNotIn("bronzecast_list_notifications", names)
+        self.assertNotIn("bronzecast_clear_notifications", names)
         self.assertIn("bronzecast_get_snapshot", names)
         self.assertIn("bronzecast_list_stickers", names)
         self.assertIn("bronzecast_add_sticker", names)
         self.assertIn("bronzecast_update_sticker", names)
         self.assertIn("bronzecast_remove_sticker", names)
         self.assertFalse(any("open_item" in name or name.endswith("_timer") for name in names))
+        add_tool = next(
+            tool for tool in listed.json()["result"]["tools"]
+            if tool["name"] == "bronzecast_add_sticker"
+        )
+        self.assertEqual(len(add_tool["inputSchema"]["properties"]["appearance"]["enum"]), 25)
+        self.assertIn("custom_svg", add_tool["inputSchema"]["properties"]["appearance"]["enum"])
+        self.assertIn("svg", add_tool["inputSchema"]["properties"])
+        self.assertIn("appearance", add_tool["inputSchema"]["required"])
 
         calls = []
 
@@ -163,10 +173,6 @@ class MCPTests(unittest.TestCase):
             calls.append((method, url, payload))
             if url.endswith("/api/character") and method == "GET":
                 return {"active_id": "mog", "requested_id": "mog", "characters": []}
-            if url.endswith("/api/notifications") and method == "POST":
-                return {"id": 7, **payload}
-            if url.endswith("/api/notifications") and method == "DELETE":
-                return None
             if url.endswith("/api/stickers") and method == "GET":
                 return [{"id": 1, "kind": "timer", "x": 28, "y": 24, "angle": 0}]
             if url.endswith("/api/stickers") and method == "POST":
@@ -187,6 +193,9 @@ class MCPTests(unittest.TestCase):
                 {"id": 3, "method": "tools/call", "params": {"name": "bronzecast_get_status", "arguments": {}}},
             )
             self.assertFalse(status.json()["result"].get("isError", False))
+            status_payload = json.loads(status.json()["result"]["content"][0]["text"])
+            self.assertIn("stickers", status_payload)
+            self.assertNotIn("notifications", status_payload)
             switch = self.mcp(
                 tokens["access_token"],
                 {
@@ -199,27 +208,61 @@ class MCPTests(unittest.TestCase):
                 },
             )
             self.assertFalse(switch.json()["result"].get("isError", False))
-            send = self.mcp(
-                tokens["access_token"],
-                {
-                    "id": 5,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "bronzecast_send_notification",
-                        "arguments": {"title": "Kupo", "message": "Mail!"},
-                    },
-                },
-            )
-            self.assertFalse(send.json()["result"].get("isError", False))
-            clear = self.mcp(
+            notification_sticker = self.mcp(
                 tokens["access_token"],
                 {
                     "id": 6,
                     "method": "tools/call",
-                    "params": {"name": "bronzecast_clear_notifications", "arguments": {}},
+                    "params": {
+                        "name": "bronzecast_add_sticker",
+                        "arguments": {
+                            "kind": "notification",
+                            "appearance": "ghost",
+                            "x": 540,
+                            "y": 80,
+                            "title": "Kupo",
+                            "text": "Mail!",
+                            "expires_in_seconds": 3600,
+                        },
+                    },
                 },
             )
-            self.assertFalse(clear.json()["result"].get("isError", False))
+            self.assertFalse(notification_sticker.json()["result"].get("isError", False))
+            clock_sticker = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 15,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "bronzecast_add_sticker",
+                        "arguments": {
+                            "kind": "clock",
+                            "appearance": "sun",
+                            "x": 240,
+                            "y": 40,
+                        },
+                    },
+                },
+            )
+            self.assertFalse(clock_sticker.json()["result"].get("isError", False))
+            art_sticker = self.mcp(
+                tokens["access_token"],
+                {
+                    "id": 16,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "bronzecast_add_sticker",
+                        "arguments": {
+                            "kind": "art",
+                            "appearance": "custom_svg",
+                            "x": 40,
+                            "y": 40,
+                            "svg": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 140"><circle cx="130" cy="70" r="50" fill="#e55"/></svg>',
+                        },
+                    },
+                },
+            )
+            self.assertFalse(art_sticker.json()["result"].get("isError", False))
             add_sticker = self.mcp(
                 tokens["access_token"],
                 {
@@ -229,6 +272,7 @@ class MCPTests(unittest.TestCase):
                         "name": "bronzecast_add_sticker",
                         "arguments": {
                             "kind": "countdown",
+                            "appearance": "maple_leaf",
                             "x": 476,
                             "y": 380,
                             "text": "til Halloween",
@@ -254,7 +298,13 @@ class MCPTests(unittest.TestCase):
                     "method": "tools/call",
                     "params": {
                         "name": "bronzecast_update_sticker",
-                        "arguments": {"id": 2, "x": 500, "y": 400, "angle": 22.5},
+                        "arguments": {
+                            "id": 2,
+                            "appearance": "christmas_tree",
+                            "x": 500,
+                            "y": 400,
+                            "angle": 22.5,
+                        },
                     },
                 },
             )
@@ -280,6 +330,7 @@ class MCPTests(unittest.TestCase):
                         "name": "bronzecast_add_sticker",
                         "arguments": {
                             "kind": "memo",
+                            "appearance": "ghost",
                             "x": 620,
                             "y": 80,
                             "angle": -12,
@@ -311,6 +362,7 @@ class MCPTests(unittest.TestCase):
                         "name": "bronzecast_add_sticker",
                         "arguments": {
                             "kind": "timer",
+                            "appearance": "pumpkin_pie",
                             "x": 20,
                             "y": 20,
                             "duration_seconds": 1200,
@@ -338,8 +390,38 @@ class MCPTests(unittest.TestCase):
         self.assertIn(
             (
                 "POST",
-                "http://generator.test/api/notifications",
-                {"title": "Kupo", "message": "Mail!"},
+                "http://generator.test/api/stickers",
+                {
+                    "kind": "notification",
+                    "appearance": "ghost",
+                    "x": 540,
+                    "y": 80,
+                    "title": "Kupo",
+                    "text": "Mail!",
+                    "expires_in_seconds": 3600,
+                },
+            ),
+            calls,
+        )
+        self.assertIn(
+            (
+                "POST",
+                "http://generator.test/api/stickers",
+                {"kind": "clock", "appearance": "sun", "x": 240, "y": 40},
+            ),
+            calls,
+        )
+        self.assertIn(
+            (
+                "POST",
+                "http://generator.test/api/stickers",
+                {
+                    "kind": "art",
+                    "appearance": "custom_svg",
+                    "x": 40,
+                    "y": 40,
+                    "svg": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 140"><circle cx="130" cy="70" r="50" fill="#e55"/></svg>',
+                },
             ),
             calls,
         )
@@ -349,6 +431,7 @@ class MCPTests(unittest.TestCase):
                 "http://generator.test/api/stickers",
                 {
                     "kind": "countdown",
+                    "appearance": "maple_leaf",
                     "text": "til Halloween",
                     "x": 476,
                     "y": 380,
@@ -359,7 +442,11 @@ class MCPTests(unittest.TestCase):
         )
         self.assertIn(("GET", "http://generator.test/api/stickers", None), calls)
         self.assertIn(
-            ("PATCH", "http://generator.test/api/stickers/2", {"x": 500, "y": 400, "angle": 22.5}),
+            (
+                "PATCH",
+                "http://generator.test/api/stickers/2",
+                {"appearance": "christmas_tree", "x": 500, "y": 400, "angle": 22.5},
+            ),
             calls,
         )
         self.assertIn(("DELETE", "http://generator.test/api/stickers/2", None), calls)
@@ -367,7 +454,7 @@ class MCPTests(unittest.TestCase):
             (
                 "POST",
                 "http://generator.test/api/stickers",
-                {"kind": "memo", "x": 620, "y": 80, "angle": -12, "title": "Plan", "text": "A movable memo"},
+                {"kind": "memo", "appearance": "ghost", "x": 620, "y": 80, "angle": -12, "title": "Plan", "text": "A movable memo"},
             ),
             calls,
         )
@@ -383,7 +470,7 @@ class MCPTests(unittest.TestCase):
             (
                 "POST",
                 "http://generator.test/api/stickers",
-                {"kind": "timer", "x": 20, "y": 20, "duration_seconds": 1200},
+                {"kind": "timer", "appearance": "pumpkin_pie", "x": 20, "y": 20, "duration_seconds": 1200},
             ),
             calls,
         )
@@ -391,14 +478,28 @@ class MCPTests(unittest.TestCase):
     def test_sticker_validation(self):
         _, tokens = self.tokens()
         invalid = (
-            ("bronzecast_add_sticker", {"kind": "countdown", "x": 1, "y": 1, "text": "x"}),
-            ("bronzecast_add_sticker", {"kind": "countdown", "x": 1, "y": 1, "text": "x", "target": "10-31-2026"}),
-            ("bronzecast_add_sticker", {"kind": "timer", "x": 1, "y": 1, "target": "2026-10-31"}),
+            ("bronzecast_add_sticker", {"kind": "countdown", "appearance": "maple_leaf", "x": 1, "y": 1, "text": "x"}),
+            ("bronzecast_add_sticker", {"kind": "countdown", "appearance": "maple_leaf", "x": 1, "y": 1, "text": "x", "target": "10-31-2026"}),
+            ("bronzecast_add_sticker", {"kind": "timer", "appearance": "pumpkin_pie", "x": 1, "y": 1, "target": "2026-10-31"}),
             ("bronzecast_add_sticker", {"kind": "reminder", "x": 1, "y": 1, "text": "x", "done": True}),
             ("bronzecast_add_sticker", {"kind": "note", "x": 1, "y": 1, "text": "x"}),
-            ("bronzecast_add_sticker", {"kind": "todo", "x": 1, "y": 1, "text": "x", "duration_seconds": 60}),
-            ("bronzecast_add_sticker", {"kind": "memo", "x": 1, "y": 1}),
-            ("bronzecast_add_sticker", {"kind": "memo", "x": 1, "y": 1, "title": "", "text": "  "}),
+            ("bronzecast_add_sticker", {"kind": "todo", "appearance": "turkey", "x": 1, "y": 1, "text": "x", "duration_seconds": 60}),
+            ("bronzecast_add_sticker", {"kind": "todo", "x": 1, "y": 1, "text": "x"}),
+            ("bronzecast_add_sticker", {"kind": "todo", "appearance": "unicorn", "x": 1, "y": 1, "text": "x"}),
+            ("bronzecast_add_sticker", {"kind": "memo", "appearance": "ghost", "x": 1, "y": 1}),
+            ("bronzecast_add_sticker", {"kind": "memo", "appearance": "ghost", "x": 1, "y": 1, "title": "", "text": "  "}),
+            ("bronzecast_add_sticker", {"kind": "todo", "x": 1, "y": 1, "text": "Task"}),
+            ("bronzecast_add_sticker", {"kind": "todo", "appearance": "unicorn", "x": 1, "y": 1, "text": "Task"}),
+            ("bronzecast_add_sticker", {"kind": "notification", "appearance": "ghost", "x": 1, "y": 1, "text": "Message"}),
+            ("bronzecast_add_sticker", {"kind": "notification", "appearance": "ghost", "x": 1, "y": 1, "text": "Message", "expires_in_seconds": 0}),
+            ("bronzecast_add_sticker", {"kind": "notification", "appearance": "ghost", "x": 1, "y": 1, "text": "Message", "expires_in_seconds": True}),
+            ("bronzecast_add_sticker", {"kind": "notification", "appearance": "ghost", "x": 1, "y": 1, "text": "Message", "expires_in_seconds": 30, "title": "  "}),
+            ("bronzecast_add_sticker", {"kind": "clock", "appearance": "sun", "x": 1, "y": 1, "text": "Static text"}),
+            ("bronzecast_add_sticker", {"kind": "art", "appearance": "custom_svg", "x": 1, "y": 1}),
+            ("bronzecast_add_sticker", {"kind": "art", "appearance": "ghost", "x": 1, "y": 1, "svg": "<svg/>"}),
+            ("bronzecast_add_sticker", {"kind": "art", "appearance": "custom_svg", "x": 1, "y": 1, "svg": "<svg/>", "text": "Rendered by SVG"}),
+            ("bronzecast_add_sticker", {"kind": "todo", "appearance": "custom_svg", "x": 1, "y": 1, "text": "Task"}),
+            ("bronzecast_add_sticker", {"kind": "todo", "appearance": "ghost", "x": 1, "y": 1, "text": "Task", "svg": "<svg/>"}),
             ("bronzecast_add_sticker", {"kind": "reminder", "x": 961, "y": 1, "text": "x"}),
             ("bronzecast_update_sticker", {"id": 0, "x": 1}),
             ("bronzecast_update_sticker", {"id": 1}),
@@ -420,10 +521,10 @@ class MCPTests(unittest.TestCase):
     def test_timer_sticker_validation(self):
         _, tokens = self.tokens()
         for arguments in (
-            {"kind": "timer", "x": 1, "y": 1},
-            {"kind": "timer", "x": 1, "y": 1, "duration_seconds": 0},
-            {"kind": "timer", "x": 1, "y": 1, "duration_seconds": 3601},
-            {"kind": "timer", "x": 1, "y": 1, "duration_seconds": True},
+            {"kind": "timer", "appearance": "pumpkin_pie", "x": 1, "y": 1},
+            {"kind": "timer", "appearance": "pumpkin_pie", "x": 1, "y": 1, "duration_seconds": 0},
+            {"kind": "timer", "appearance": "pumpkin_pie", "x": 1, "y": 1, "duration_seconds": 3601},
+            {"kind": "timer", "appearance": "pumpkin_pie", "x": 1, "y": 1, "duration_seconds": True},
             {"id": 1, "action": "dance"},
             {"id": 1, "action": "set"},
             {"id": 1, "action": "start", "duration_seconds": 60},
@@ -671,7 +772,7 @@ class MCPTests(unittest.TestCase):
                 {
                     "id": 1,
                     "method": "tools/call",
-                    "params": {"name": "bronzecast_list_notifications", "arguments": {}},
+                    "params": {"name": "bronzecast_list_stickers", "arguments": {}},
                 },
             )
         self.assertEqual(response.status_code, 200)
@@ -700,8 +801,6 @@ class MCPTests(unittest.TestCase):
         async def fake_json(method, url, payload=None):
             if url.endswith("/api/character"):
                 return {"active_id": "mog"}
-            if url.endswith("/api/notifications"):
-                return []
             if url.endswith("/api/stickers"):
                 return [{"kind": "timer", "state": "running", "remaining_seconds": 1490}]
             return {"source": "live"}

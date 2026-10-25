@@ -109,7 +109,6 @@ def write_all(fd, data):
 
 
 API_PATHS = (
-    '/api/notifications',
     '/api/characters',
     '/api/character',
     '/api/stickers',

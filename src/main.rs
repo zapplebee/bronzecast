@@ -1,9 +1,9 @@
 use macroquad::prelude::*;
 mod characters;
-mod notifications;
 mod snapshot;
 mod sticker_art;
 mod stickers;
+mod svg_art;
 use std::{
     io::Write,
     process::{Child, ChildStdin, Command, Stdio},
@@ -142,7 +142,6 @@ fn start_sender() -> Result<(Child, ChildStdin), String> {
 }
 
 fn start_control_server(
-    feed: notifications::SharedFeed,
     selection: characters::SharedSelection,
     sticker_store: stickers::SharedStickers,
     snapshot_cache: snapshot::SharedSnapshot,
@@ -156,13 +155,6 @@ fn start_control_server(
             use axum::Router;
 
             let app = Router::new()
-                .route(
-                    "/api/notifications",
-                    axum::routing::get(notifications::list)
-                        .post(notifications::post)
-                        .delete(notifications::clear),
-                )
-                .with_state(feed)
                 .merge(characters::routes(selection))
                 .merge(stickers::routes(sticker_store))
                 .merge(snapshot::routes(snapshot_cache));
@@ -290,7 +282,6 @@ async fn main() {
             return;
         }
     };
-    let feed = notifications::SharedFeed::default();
     let state_dir = std::env::var("BRONZECAST_STATE_DIR").unwrap_or_else(|_| "state".into());
     let sticker_store = match stickers::Store::load(&state_dir) {
         Ok(store) => store,
@@ -300,9 +291,8 @@ async fn main() {
         }
     };
     let snapshot_cache = snapshot::shared();
-    let sticker_layer = sticker_art::StickerLayer::new();
+    let mut sticker_layer = sticker_art::StickerLayer::new();
     start_control_server(
-        feed.clone(),
         selection.clone(),
         sticker_store.clone(),
         snapshot_cache.clone(),
@@ -351,8 +341,8 @@ async fn main() {
             target: vec3(0.0, -0.15, 0.0),
             up: vec3(0.0, 1.0, 0.0),
             fovy: 43.0_f32.to_radians(),
-            viewport: Some((0, 0, 440, 420)),
-            aspect: Some(440.0 / 420.0),
+            viewport: Some((0, 0, WIDTH as i32, HEIGHT as i32)),
+            aspect: Some(WIDTH as f32 / HEIGHT as f32),
             render_target: Some(scene_target.clone()),
             ..Default::default()
         };
@@ -415,7 +405,7 @@ async fn main() {
         );
         gl_use_default_material();
         let sticker_views = sticker_store.snapshot();
-        notifications::draw(&feed, &sticker_views, &sticker_layer);
+        sticker_layer.draw(&sticker_views);
 
         set_default_camera();
         clear_background(BLACK);

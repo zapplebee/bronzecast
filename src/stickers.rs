@@ -14,10 +14,71 @@ use std::{
 
 pub type SharedStickers = Arc<Store>;
 
-const VERSION: u8 = 1;
+const VERSION: u8 = 3;
 const MAX_DURATION: u64 = 60 * 60;
+const MAX_NOTIFICATION_TTL: u64 = 7 * 24 * 60 * 60;
 const CANVAS_WIDTH: f32 = 960.0;
 const CANVAS_HEIGHT: f32 = 540.0;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Appearance {
+    JackOLantern,
+    Ghost,
+    BlackCat,
+    Bat,
+    CandyPail,
+    Turkey,
+    Cornucopia,
+    MapleLeaf,
+    PumpkinPie,
+    ChristmasTree,
+    WrappedGift,
+    Snowman,
+    Reindeer,
+    GingerbreadPerson,
+    CandyCane,
+    Fireworks,
+    LunarNewYearLantern,
+    Diya,
+    Heart,
+    EasterBunny,
+    DecoratedEgg,
+    Tulip,
+    Sun,
+    IceCreamCone,
+    CustomSvg,
+}
+
+impl Appearance {
+    pub const ALL: [Self; 25] = [
+        Self::JackOLantern,
+        Self::Ghost,
+        Self::BlackCat,
+        Self::Bat,
+        Self::CandyPail,
+        Self::Turkey,
+        Self::Cornucopia,
+        Self::MapleLeaf,
+        Self::PumpkinPie,
+        Self::ChristmasTree,
+        Self::WrappedGift,
+        Self::Snowman,
+        Self::Reindeer,
+        Self::GingerbreadPerson,
+        Self::CandyCane,
+        Self::Fireworks,
+        Self::LunarNewYearLantern,
+        Self::Diya,
+        Self::Heart,
+        Self::EasterBunny,
+        Self::DecoratedEgg,
+        Self::Tulip,
+        Self::Sun,
+        Self::IceCreamCone,
+        Self::CustomSvg,
+    ];
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -26,6 +87,9 @@ pub enum Kind {
     Countdown,
     Todo,
     Memo,
+    Notification,
+    Clock,
+    Art,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -33,6 +97,7 @@ pub enum Kind {
 enum Sticker {
     Timer {
         id: u64,
+        appearance: Appearance,
         x: f32,
         y: f32,
         angle: f32,
@@ -42,9 +107,12 @@ enum Sticker {
         has_started: bool,
         created_at: u64,
         updated_at: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg: Option<String>,
     },
     Countdown {
         id: u64,
+        appearance: Appearance,
         x: f32,
         y: f32,
         angle: f32,
@@ -52,9 +120,12 @@ enum Sticker {
         target: String,
         created_at: u64,
         updated_at: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg: Option<String>,
     },
     Todo {
         id: u64,
+        appearance: Appearance,
         x: f32,
         y: f32,
         angle: f32,
@@ -62,14 +133,54 @@ enum Sticker {
         done: bool,
         created_at: u64,
         updated_at: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg: Option<String>,
     },
     Memo {
         id: u64,
+        appearance: Appearance,
         x: f32,
         y: f32,
         angle: f32,
         title: String,
         text: String,
+        created_at: u64,
+        updated_at: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg: Option<String>,
+    },
+    Notification {
+        id: u64,
+        appearance: Appearance,
+        x: f32,
+        y: f32,
+        angle: f32,
+        title: String,
+        text: String,
+        expires_at: u64,
+        created_at: u64,
+        updated_at: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg: Option<String>,
+    },
+    Clock {
+        id: u64,
+        appearance: Appearance,
+        x: f32,
+        y: f32,
+        angle: f32,
+        created_at: u64,
+        updated_at: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg: Option<String>,
+    },
+    Art {
+        id: u64,
+        appearance: Appearance,
+        x: f32,
+        y: f32,
+        angle: f32,
+        svg: String,
         created_at: u64,
         updated_at: u64,
     },
@@ -81,7 +192,10 @@ impl Sticker {
             Self::Timer { id, .. }
             | Self::Countdown { id, .. }
             | Self::Todo { id, .. }
-            | Self::Memo { id, .. } => *id,
+            | Self::Memo { id, .. }
+            | Self::Notification { id, .. }
+            | Self::Clock { id, .. }
+            | Self::Art { id, .. } => *id,
         }
     }
 
@@ -91,6 +205,74 @@ impl Sticker {
             Self::Countdown { .. } => Kind::Countdown,
             Self::Todo { .. } => Kind::Todo,
             Self::Memo { .. } => Kind::Memo,
+            Self::Notification { .. } => Kind::Notification,
+            Self::Clock { .. } => Kind::Clock,
+            Self::Art { .. } => Kind::Art,
+        }
+    }
+
+    fn appearance(&self) -> Appearance {
+        match self {
+            Self::Timer { appearance, .. }
+            | Self::Countdown { appearance, .. }
+            | Self::Todo { appearance, .. }
+            | Self::Memo { appearance, .. }
+            | Self::Notification { appearance, .. }
+            | Self::Clock { appearance, .. }
+            | Self::Art { appearance, .. } => *appearance,
+        }
+    }
+
+    fn set_appearance(&mut self, value: Appearance) {
+        match self {
+            Self::Timer {
+                appearance, svg, ..
+            }
+            | Self::Countdown {
+                appearance, svg, ..
+            }
+            | Self::Todo {
+                appearance, svg, ..
+            }
+            | Self::Memo {
+                appearance, svg, ..
+            }
+            | Self::Notification {
+                appearance, svg, ..
+            }
+            | Self::Clock {
+                appearance, svg, ..
+            } => {
+                *appearance = value;
+                if value != Appearance::CustomSvg {
+                    *svg = None;
+                }
+            }
+            Self::Art { appearance, .. } => *appearance = value,
+        }
+    }
+
+    fn svg(&self) -> Option<&str> {
+        match self {
+            Self::Timer { svg, .. }
+            | Self::Countdown { svg, .. }
+            | Self::Todo { svg, .. }
+            | Self::Memo { svg, .. }
+            | Self::Notification { svg, .. }
+            | Self::Clock { svg, .. } => svg.as_deref(),
+            Self::Art { svg, .. } => Some(svg),
+        }
+    }
+
+    fn set_svg(&mut self, value: String) {
+        match self {
+            Self::Timer { svg, .. }
+            | Self::Countdown { svg, .. }
+            | Self::Todo { svg, .. }
+            | Self::Memo { svg, .. }
+            | Self::Notification { svg, .. }
+            | Self::Clock { svg, .. } => *svg = Some(value),
+            Self::Art { svg, .. } => *svg = value,
         }
     }
 
@@ -99,7 +281,10 @@ impl Sticker {
             Self::Timer { x, y, angle, .. }
             | Self::Countdown { x, y, angle, .. }
             | Self::Todo { x, y, angle, .. }
-            | Self::Memo { x, y, angle, .. } => (*x, *y, *angle),
+            | Self::Memo { x, y, angle, .. }
+            | Self::Notification { x, y, angle, .. }
+            | Self::Clock { x, y, angle, .. }
+            | Self::Art { x, y, angle, .. } => (*x, *y, *angle),
         }
     }
 
@@ -121,6 +306,21 @@ impl Sticker {
                 ..
             }
             | Self::Memo {
+                created_at,
+                updated_at,
+                ..
+            }
+            | Self::Notification {
+                created_at,
+                updated_at,
+                ..
+            }
+            | Self::Clock {
+                created_at,
+                updated_at,
+                ..
+            }
+            | Self::Art {
                 created_at,
                 updated_at,
                 ..
@@ -153,6 +353,24 @@ impl Sticker {
                 y: sy,
                 angle: sa,
                 ..
+            }
+            | Self::Notification {
+                x: sx,
+                y: sy,
+                angle: sa,
+                ..
+            }
+            | Self::Clock {
+                x: sx,
+                y: sy,
+                angle: sa,
+                ..
+            }
+            | Self::Art {
+                x: sx,
+                y: sy,
+                angle: sa,
+                ..
             } => {
                 *sx = x;
                 *sy = y;
@@ -166,17 +384,22 @@ impl Sticker {
             Self::Timer { updated_at, .. }
             | Self::Countdown { updated_at, .. }
             | Self::Todo { updated_at, .. }
-            | Self::Memo { updated_at, .. } => *updated_at = value,
+            | Self::Memo { updated_at, .. }
+            | Self::Notification { updated_at, .. }
+            | Self::Clock { updated_at, .. }
+            | Self::Art { updated_at, .. } => *updated_at = value,
         }
     }
 
     fn valid(&self) -> bool {
         let (x, y, angle) = self.position();
         self.id() > 0
+            && Appearance::ALL.contains(&self.appearance())
             && x.is_finite()
             && y.is_finite()
             && angle.is_finite()
             && (-180.0..180.0).contains(&angle)
+            && self.valid_svg()
             && match self {
                 Self::Timer {
                     duration_seconds,
@@ -190,30 +413,66 @@ impl Sticker {
                         && running_since.is_none_or(|stamp| stamp > 0)
                         && (running_since.is_none() || *has_started)
                         && (*has_started || remaining_at_anchor_seconds == duration_seconds)
-                        && validate_stored_position(Kind::Timer, x, y, angle)
+                        && validate_stored_position(self.appearance(), x, y, angle)
                 }
                 Self::Countdown { text, target, .. } => {
                     valid_text(text, 48, false)
                         && parse_target(target).is_some()
-                        && validate_stored_position(Kind::Countdown, x, y, angle)
+                        && validate_stored_position(self.appearance(), x, y, angle)
                 }
                 Self::Todo { text, .. } => {
-                    valid_text(text, 160, true) && validate_stored_position(Kind::Todo, x, y, angle)
+                    valid_text(text, 160, true)
+                        && validate_stored_position(self.appearance(), x, y, angle)
                 }
                 Self::Memo { title, text, .. } => {
                     valid_optional_text(title, 48, false)
                         && valid_optional_text(text, 160, true)
                         && (!title.trim().is_empty() || !text.trim().is_empty())
-                        && validate_stored_position(Kind::Memo, x, y, angle)
+                        && validate_stored_position(self.appearance(), x, y, angle)
+                }
+                Self::Notification {
+                    title,
+                    text,
+                    expires_at,
+                    created_at,
+                    ..
+                } => {
+                    valid_text(title, 48, false)
+                        && valid_text(text, 320, true)
+                        && *expires_at > *created_at
+                        && *expires_at - *created_at <= MAX_NOTIFICATION_TTL
+                        && validate_stored_position(self.appearance(), x, y, angle)
+                }
+                Self::Clock { .. } => validate_stored_position(self.appearance(), x, y, angle),
+                Self::Art { .. } => {
+                    self.appearance() == Appearance::CustomSvg
+                        && validate_stored_position(self.appearance(), x, y, angle)
                 }
             }
+    }
+
+    fn valid_svg(&self) -> bool {
+        match (self.appearance(), self.svg()) {
+            (Appearance::CustomSvg, Some(svg)) => crate::svg_art::validate(svg).is_ok(),
+            (Appearance::CustomSvg, None) => false,
+            (_, None) => true,
+            (_, Some(_)) => false,
+        }
     }
 
     fn view(&self, now: u64, today: NaiveDate) -> StickerView {
         let (x, y, angle) = self.position();
         let (created_at, updated_at) = self.timestamps();
-        let mut view =
-            StickerView::base(self.id(), self.kind(), x, y, angle, created_at, updated_at);
+        let mut view = StickerView::base(
+            self.id(),
+            self.kind(),
+            self.appearance(),
+            x,
+            y,
+            angle,
+            created_at,
+            updated_at,
+        );
         match self {
             Self::Timer {
                 duration_seconds,
@@ -266,6 +525,25 @@ impl Sticker {
                 }
                 view.state = "memo";
             }
+            Self::Notification {
+                title,
+                text,
+                expires_at,
+                ..
+            } => {
+                view.title = Some(title.clone());
+                view.text = Some(text.clone());
+                view.expires_at = Some(*expires_at);
+                view.state = "notification";
+            }
+            Self::Clock { .. } => view.state = "clock",
+            Self::Art { svg, .. } => {
+                view.svg = Some(svg.clone());
+                view.state = "art";
+            }
+        }
+        if self.appearance() == Appearance::CustomSvg && self.kind() != Kind::Art {
+            view.svg = self.svg().map(str::to_owned);
         }
         view
     }
@@ -283,6 +561,7 @@ struct StickerFile {
 pub struct StickerView {
     pub id: u64,
     pub kind: Kind,
+    pub appearance: Appearance,
     pub x: f32,
     pub y: f32,
     pub angle: f32,
@@ -307,12 +586,17 @@ pub struct StickerView {
     pub state: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub done: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub svg: Option<String>,
 }
 
 impl StickerView {
     fn base(
         id: u64,
         kind: Kind,
+        appearance: Appearance,
         x: f32,
         y: f32,
         angle: f32,
@@ -322,6 +606,7 @@ impl StickerView {
         Self {
             id,
             kind,
+            appearance,
             x,
             y,
             angle,
@@ -337,6 +622,8 @@ impl StickerView {
             finished: None,
             state: "",
             done: None,
+            expires_at: None,
+            svg: None,
         }
     }
 }
@@ -354,6 +641,7 @@ pub enum Action {
 #[serde(deny_unknown_fields)]
 pub struct NewSticker {
     kind: Kind,
+    appearance: Appearance,
     #[serde(default)]
     x: Option<f32>,
     #[serde(default)]
@@ -370,11 +658,17 @@ pub struct NewSticker {
     duration_seconds: Option<u64>,
     #[serde(default)]
     done: Option<bool>,
+    #[serde(default)]
+    expires_in_seconds: Option<u64>,
+    #[serde(default)]
+    svg: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StickerUpdate {
+    #[serde(default)]
+    appearance: Option<Appearance>,
     #[serde(default)]
     x: Option<f32>,
     #[serde(default)]
@@ -393,6 +687,8 @@ pub struct StickerUpdate {
     action: Option<Action>,
     #[serde(default)]
     duration_seconds: Option<u64>,
+    #[serde(default)]
+    svg: Option<String>,
 }
 
 struct Inner {
@@ -448,7 +744,16 @@ impl Store {
     }
 
     fn snapshot_at(&self, now: u64, today: NaiveDate) -> Vec<StickerView> {
-        let inner = self.inner.lock().expect("sticker lock");
+        let mut inner = self.inner.lock().expect("sticker lock");
+        let existing = inner.stickers.len();
+        inner.stickers.retain(|sticker| {
+            !matches!(sticker, Sticker::Notification { expires_at, .. } if *expires_at <= now)
+        });
+        if inner.stickers.len() != existing
+            && let Err((_, error)) = self.write(&inner)
+        {
+            eprintln!("could not persist expired sticker cleanup: {error}");
+        }
         let mut stickers = inner
             .stickers
             .iter()
@@ -473,12 +778,19 @@ impl Store {
         let id = inner.next_id;
         let x = input.x.expect("validated sticker x");
         let y = input.y.expect("validated sticker y");
+        let appearance = input.appearance;
         let angle = normalize_angle(input.angle.unwrap_or(0.0));
+        let svg = if appearance == Appearance::CustomSvg {
+            Some(input.svg.clone().expect("validated custom SVG"))
+        } else {
+            None
+        };
         let mut sticker = match input.kind {
             Kind::Timer => {
                 let duration = input.duration_seconds.expect("validated timer duration");
                 Sticker::Timer {
                     id,
+                    appearance,
                     x,
                     y,
                     angle,
@@ -488,10 +800,12 @@ impl Store {
                     has_started: false,
                     created_at: now,
                     updated_at: now,
+                    svg: svg.clone(),
                 }
             }
             Kind::Countdown => Sticker::Countdown {
                 id,
+                appearance,
                 x,
                 y,
                 angle,
@@ -503,9 +817,11 @@ impl Store {
                 target: input.target.expect("validated countdown target"),
                 created_at: now,
                 updated_at: now,
+                svg: svg.clone(),
             },
             Kind::Todo => Sticker::Todo {
                 id,
+                appearance,
                 x,
                 y,
                 angle,
@@ -513,14 +829,62 @@ impl Store {
                 done: input.done.unwrap_or(false),
                 created_at: now,
                 updated_at: now,
+                svg: svg.clone(),
             },
             Kind::Memo => Sticker::Memo {
                 id,
+                appearance,
                 x,
                 y,
                 angle,
                 title: input.title.unwrap_or_default().trim().to_owned(),
                 text: input.text.unwrap_or_default().trim().to_owned(),
+                created_at: now,
+                updated_at: now,
+                svg: svg.clone(),
+            },
+            Kind::Notification => Sticker::Notification {
+                id,
+                appearance,
+                x,
+                y,
+                angle,
+                title: input
+                    .title
+                    .unwrap_or_else(|| "Notification".to_owned())
+                    .trim()
+                    .to_owned(),
+                text: input
+                    .text
+                    .expect("validated notification text")
+                    .trim()
+                    .to_owned(),
+                expires_at: now.saturating_add(
+                    input
+                        .expires_in_seconds
+                        .expect("validated notification TTL"),
+                ),
+                created_at: now,
+                updated_at: now,
+                svg: svg.clone(),
+            },
+            Kind::Clock => Sticker::Clock {
+                id,
+                appearance,
+                x,
+                y,
+                angle,
+                created_at: now,
+                updated_at: now,
+                svg: svg.clone(),
+            },
+            Kind::Art => Sticker::Art {
+                id,
+                appearance,
+                x,
+                y,
+                angle,
+                svg: input.svg.expect("validated art SVG"),
                 created_at: now,
                 updated_at: now,
             },
@@ -555,6 +919,12 @@ impl Store {
             .ok_or_else(|| (StatusCode::NOT_FOUND, format!("no sticker {id}")))?;
         let mut next = inner.stickers[index].clone();
         validate_update(&next, &input)?;
+        if let Some(appearance) = input.appearance {
+            next.set_appearance(appearance);
+        }
+        if let Some(svg) = input.svg {
+            next.set_svg(svg);
+        }
         let (mut x, mut y, mut angle) = next.position();
         if let Some(value) = input.x {
             x = value;
@@ -610,6 +980,16 @@ impl Store {
                     *text = value.trim().to_owned();
                 }
             }
+            Sticker::Notification { title, text, .. } => {
+                if let Some(value) = input.title {
+                    *title = value.trim().to_owned();
+                }
+                if let Some(value) = input.text {
+                    *text = value.trim().to_owned();
+                }
+            }
+            Sticker::Clock { .. } => {}
+            Sticker::Art { .. } => {}
         }
         clamp_sticker(&mut next);
         if next != inner.stickers[index] {
@@ -667,22 +1047,18 @@ impl Store {
     }
 }
 
-fn dimensions(kind: Kind) -> (f32, f32) {
-    match kind {
-        Kind::Timer => (164.0, 164.0),
-        Kind::Countdown => (200.0, 190.0),
-        Kind::Todo | Kind::Memo => (260.0, 140.0),
-    }
+fn dimensions(_appearance: Appearance) -> (f32, f32) {
+    (260.0, 140.0)
 }
 
 fn clamp_sticker(sticker: &mut Sticker) {
     let (x, y, angle) = sticker.position();
-    let (x, y) = clamp_position(sticker.kind(), x, y, angle);
+    let (x, y) = clamp_position(sticker.appearance(), x, y, angle);
     sticker.set_position(x, y, angle);
 }
 
-fn clamp_position(kind: Kind, x: f32, y: f32, angle: f32) -> (f32, f32) {
-    let (width, height) = dimensions(kind);
+fn clamp_position(appearance: Appearance, x: f32, y: f32, angle: f32) -> (f32, f32) {
+    let (width, height) = dimensions(appearance);
     let radians = angle.to_radians();
     let cos = radians.cos().abs();
     let sin = radians.sin().abs();
@@ -695,8 +1071,8 @@ fn clamp_position(kind: Kind, x: f32, y: f32, angle: f32) -> (f32, f32) {
     (center_x - width / 2.0, center_y - height / 2.0)
 }
 
-fn validate_stored_position(kind: Kind, x: f32, y: f32, angle: f32) -> bool {
-    let (clamped_x, clamped_y) = clamp_position(kind, x, y, angle);
+fn validate_stored_position(appearance: Appearance, x: f32, y: f32, angle: f32) -> bool {
+    let (clamped_x, clamped_y) = clamp_position(appearance, x, y, angle);
     (x - clamped_x).abs() < 0.01 && (y - clamped_y).abs() < 0.01
 }
 
@@ -716,13 +1092,15 @@ fn validate_new(input: &NewSticker) -> Result<(), (StatusCode, String)> {
     if input.angle.is_some_and(|angle| !angle.is_finite()) {
         return Err((StatusCode::BAD_REQUEST, "angle must be finite".into()));
     }
+    validate_svg_pair(input.appearance, input.svg.as_deref())?;
     match input.kind {
         Kind::Timer => {
             reject_fields(
                 input.title.is_some()
                     || input.text.is_some()
                     || input.target.is_some()
-                    || input.done.is_some(),
+                    || input.done.is_some()
+                    || input.expires_in_seconds.is_some(),
                 "timer accepts only duration_seconds in addition to position and angle",
             )?;
             let duration = input.duration_seconds.ok_or((
@@ -733,8 +1111,11 @@ fn validate_new(input: &NewSticker) -> Result<(), (StatusCode, String)> {
         }
         Kind::Countdown => {
             reject_fields(
-                input.title.is_some() || input.duration_seconds.is_some() || input.done.is_some(),
-                "countdown does not accept title, duration_seconds, or done",
+                input.title.is_some()
+                    || input.duration_seconds.is_some()
+                    || input.done.is_some()
+                    || input.expires_in_seconds.is_some(),
+                "countdown does not accept title, duration_seconds, done, or expiry",
             )?;
             validate_label(input.text.as_deref().unwrap_or(""))?;
             let target = input.target.as_deref().ok_or((
@@ -750,20 +1131,69 @@ fn validate_new(input: &NewSticker) -> Result<(), (StatusCode, String)> {
         }
         Kind::Todo => {
             reject_fields(
-                input.title.is_some() || input.target.is_some() || input.duration_seconds.is_some(),
-                "todo does not accept title, target, or duration_seconds",
+                input.title.is_some()
+                    || input.target.is_some()
+                    || input.duration_seconds.is_some()
+                    || input.expires_in_seconds.is_some(),
+                "todo does not accept title, target, duration_seconds, or expiry",
             )?;
             validate_body(input.text.as_deref().unwrap_or(""), "todo")?;
         }
         Kind::Memo => {
             reject_fields(
-                input.target.is_some() || input.duration_seconds.is_some() || input.done.is_some(),
+                input.target.is_some()
+                    || input.duration_seconds.is_some()
+                    || input.done.is_some()
+                    || input.expires_in_seconds.is_some(),
                 "memo does not accept target, duration_seconds, or done",
             )?;
             validate_memo(
                 input.title.as_deref().unwrap_or(""),
                 input.text.as_deref().unwrap_or(""),
             )?;
+        }
+        Kind::Notification => {
+            reject_fields(
+                input.target.is_some() || input.duration_seconds.is_some() || input.done.is_some(),
+                "notification accepts only title, text, expiry, position, and angle",
+            )?;
+            if let Some(title) = input.title.as_deref() {
+                validate_notification_title(title)?;
+            }
+            validate_notification_text(input.text.as_deref().unwrap_or(""))?;
+            let ttl = input.expires_in_seconds.ok_or((
+                StatusCode::BAD_REQUEST,
+                "notification requires expires_in_seconds".into(),
+            ))?;
+            validate_notification_ttl(ttl)?;
+        }
+        Kind::Clock => {
+            reject_fields(
+                input.title.is_some()
+                    || input.text.is_some()
+                    || input.target.is_some()
+                    || input.duration_seconds.is_some()
+                    || input.done.is_some()
+                    || input.expires_in_seconds.is_some(),
+                "clock accepts only appearance, position, and angle",
+            )?;
+        }
+        Kind::Art => {
+            reject_fields(
+                input.title.is_some()
+                    || input.text.is_some()
+                    || input.target.is_some()
+                    || input.duration_seconds.is_some()
+                    || input.done.is_some()
+                    || input.expires_in_seconds.is_some(),
+                "art accepts only custom SVG artwork, position, and angle",
+            )?;
+            if input.appearance != Appearance::CustomSvg {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "art requires appearance 'custom_svg'".into(),
+                ));
+            }
         }
     }
     Ok(())
@@ -779,6 +1209,25 @@ fn validate_update(sticker: &Sticker, input: &StickerUpdate) -> Result<(), (Stat
     if input.angle.is_some_and(|angle| !angle.is_finite()) {
         return Err((StatusCode::BAD_REQUEST, "angle must be finite".into()));
     }
+    let appearance = input.appearance.unwrap_or_else(|| sticker.appearance());
+    if sticker.kind() == Kind::Art && appearance != Appearance::CustomSvg {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "art stickers require appearance 'custom_svg'".into(),
+        ));
+    }
+    let next_svg = if appearance == Appearance::CustomSvg {
+        input.svg.as_deref().or_else(|| sticker.svg())
+    } else {
+        None
+    };
+    if input.svg.is_some() && appearance != Appearance::CustomSvg {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "svg is accepted only with appearance 'custom_svg'".into(),
+        ));
+    }
+    validate_svg_pair(appearance, next_svg)?;
     match sticker {
         Sticker::Timer { .. } => {
             reject_fields(
@@ -848,16 +1297,55 @@ fn validate_update(sticker: &Sticker, input: &StickerUpdate) -> Result<(), (Stat
             let next_text = input.text.as_deref().unwrap_or(text);
             validate_memo(next_title, next_text)?;
         }
+        Sticker::Notification { .. } => {
+            reject_fields(
+                input.target.is_some()
+                    || input.done.is_some()
+                    || input.action.is_some()
+                    || input.duration_seconds.is_some(),
+                "notification accepts only position, angle, title, and text",
+            )?;
+            if let Some(value) = &input.title {
+                validate_notification_title(value)?;
+            }
+            if let Some(value) = &input.text {
+                validate_notification_text(value)?;
+            }
+        }
+        Sticker::Clock { .. } => {
+            reject_fields(
+                input.title.is_some()
+                    || input.text.is_some()
+                    || input.target.is_some()
+                    || input.done.is_some()
+                    || input.action.is_some()
+                    || input.duration_seconds.is_some(),
+                "clock accepts only position and angle",
+            )?;
+        }
+        Sticker::Art { .. } => {
+            reject_fields(
+                input.title.is_some()
+                    || input.text.is_some()
+                    || input.target.is_some()
+                    || input.done.is_some()
+                    || input.action.is_some()
+                    || input.duration_seconds.is_some(),
+                "art accepts only SVG artwork, position, and angle",
+            )?;
+        }
     }
     if input.x.is_none()
         && input.y.is_none()
         && input.angle.is_none()
+        && input.appearance.is_none()
         && input.title.is_none()
         && input.text.is_none()
         && input.target.is_none()
         && input.done.is_none()
         && input.action.is_none()
         && input.duration_seconds.is_none()
+        && input.svg.is_none()
     {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -865,6 +1353,26 @@ fn validate_update(sticker: &Sticker, input: &StickerUpdate) -> Result<(), (Stat
         ));
     }
     Ok(())
+}
+
+fn validate_svg_pair(
+    appearance: Appearance,
+    svg: Option<&str>,
+) -> Result<(), (StatusCode, String)> {
+    match (appearance, svg) {
+        (Appearance::CustomSvg, None) => Err((
+            StatusCode::BAD_REQUEST,
+            "appearance 'custom_svg' requires svg artwork".into(),
+        )),
+        (Appearance::CustomSvg, Some(source)) => {
+            crate::svg_art::validate(source).map_err(|error| (StatusCode::BAD_REQUEST, error))
+        }
+        (_, Some(_)) => Err((
+            StatusCode::BAD_REQUEST,
+            "svg is accepted only with appearance 'custom_svg'".into(),
+        )),
+        (_, None) => Ok(()),
+    }
 }
 
 fn reject_fields(reject: bool, message: &str) -> Result<(), (StatusCode, String)> {
@@ -893,6 +1401,39 @@ fn validate_duration(duration: u64) -> Result<(), (StatusCode, String)> {
         Err((
             StatusCode::BAD_REQUEST,
             format!("duration_seconds must be between 1 and {MAX_DURATION}"),
+        ))
+    }
+}
+
+fn validate_notification_ttl(ttl: u64) -> Result<(), (StatusCode, String)> {
+    if (1..=MAX_NOTIFICATION_TTL).contains(&ttl) {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            format!("expires_in_seconds must be between 1 and {MAX_NOTIFICATION_TTL}"),
+        ))
+    }
+}
+
+fn validate_notification_title(title: &str) -> Result<(), (StatusCode, String)> {
+    if valid_text(title, 48, false) {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            "notification title must be 1–48 characters with no control characters".into(),
+        ))
+    }
+}
+
+fn validate_notification_text(text: &str) -> Result<(), (StatusCode, String)> {
+    if valid_text(text, 320, true) {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            "notification text must be 1–320 characters; only newlines are allowed as control characters".into(),
         ))
     }
 }
@@ -1064,6 +1605,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
+    const TEST_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 140"><path d="M10 10h240v120H10z" fill="#e55"/></svg>"##;
 
     fn temp_dir() -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -1078,6 +1620,7 @@ mod tests {
     fn input(kind: Kind, text: Option<&str>) -> NewSticker {
         NewSticker {
             kind,
+            appearance: Appearance::JackOLantern,
             x: Some(100.0),
             y: Some(100.0),
             angle: None,
@@ -1086,11 +1629,14 @@ mod tests {
             target: None,
             duration_seconds: None,
             done: None,
+            expires_in_seconds: None,
+            svg: None,
         }
     }
 
     fn timer_update(action: Action, duration_seconds: Option<u64>) -> StickerUpdate {
         StickerUpdate {
+            appearance: None,
             x: None,
             y: None,
             angle: None,
@@ -1100,6 +1646,7 @@ mod tests {
             done: None,
             action: Some(action),
             duration_seconds,
+            svg: None,
         }
     }
 
@@ -1117,12 +1664,37 @@ mod tests {
             .add_at(memo, 1_000, NaiveDate::from_ymd_opt(2026, 10, 24).unwrap())
             .unwrap();
         assert_eq!(memo.kind, Kind::Memo);
+        assert_eq!(memo.appearance, Appearance::JackOLantern);
         let raw = fs::read_to_string(dir.join("stickers.json")).unwrap();
-        assert!(raw.contains("\"version\": 1"));
+        assert!(raw.contains("\"version\": 3"));
         assert!(raw.contains("\"kind\": \"memo\""));
+        assert!(raw.contains("\"appearance\": \"jack_o_lantern\""));
         assert!(!raw.contains("\"kind\": \"timer\""));
+        assert_eq!(Appearance::ALL.len(), 25);
         let reloaded = Store::load(&dir).unwrap();
         assert_eq!(reloaded.snapshot().len(), 1);
+
+        let changed = reloaded
+            .update_at(
+                memo.id,
+                StickerUpdate {
+                    appearance: Some(Appearance::Ghost),
+                    x: None,
+                    y: None,
+                    angle: None,
+                    title: None,
+                    text: None,
+                    target: None,
+                    done: None,
+                    action: None,
+                    duration_seconds: None,
+                    svg: None,
+                },
+                1_001,
+                NaiveDate::from_ymd_opt(2026, 10, 24).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(changed.appearance, Appearance::Ghost);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1149,6 +1721,148 @@ mod tests {
         let mut bad = input(Kind::Todo, Some("Task"));
         bad.target = Some("2026-10-31".into());
         assert!(store.add_at(bad, 1_000, today).is_err());
+        assert!(
+            store
+                .add_at(input(Kind::Notification, Some("Temporary")), 1_000, today)
+                .is_err()
+        );
+        assert!(
+            store
+                .add_at(input(Kind::Clock, Some("Static text")), 1_000, today)
+                .is_err()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn every_preset_and_custom_svg_appearance_works_with_supported_kinds() {
+        let dir = temp_dir();
+        let store = Store::load(&dir).unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 10, 24).unwrap();
+        let kinds = [
+            Kind::Timer,
+            Kind::Countdown,
+            Kind::Todo,
+            Kind::Memo,
+            Kind::Notification,
+            Kind::Clock,
+            Kind::Art,
+        ];
+        for appearance in Appearance::ALL {
+            for kind in kinds {
+                if kind == Kind::Art && appearance != Appearance::CustomSvg {
+                    continue;
+                }
+                let text = if matches!(kind, Kind::Timer | Kind::Clock | Kind::Art) {
+                    None
+                } else {
+                    Some("Center text")
+                };
+                let mut sticker = input(kind, text);
+                sticker.appearance = appearance;
+                if appearance == Appearance::CustomSvg {
+                    sticker.svg = Some(TEST_SVG.into());
+                }
+                match kind {
+                    Kind::Timer => sticker.duration_seconds = Some(600),
+                    Kind::Countdown => sticker.target = Some("2026-10-31".into()),
+                    Kind::Notification => sticker.expires_in_seconds = Some(3_600),
+                    Kind::Todo | Kind::Memo | Kind::Clock | Kind::Art => {}
+                }
+                let view = store.add_at(sticker, 1_000, today).unwrap();
+                assert_eq!(view.kind, kind);
+                assert_eq!(view.appearance, appearance);
+            }
+        }
+        assert_eq!(store.snapshot_at(1_000, today).len(), 24 * 6 + 7);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn custom_svg_is_persisted_updated_and_cleared_when_selecting_a_preset() {
+        let dir = temp_dir();
+        let store = Store::load(&dir).unwrap();
+        let today = today();
+
+        let mut art = input(Kind::Art, None);
+        art.appearance = Appearance::CustomSvg;
+        art.svg = Some(TEST_SVG.into());
+        let art = store.add_at(art, 1_000, today).unwrap();
+        assert_eq!(art.svg.as_deref(), Some(TEST_SVG));
+        assert_eq!(art.state, "art");
+
+        let mut timer = input(Kind::Timer, None);
+        timer.appearance = Appearance::CustomSvg;
+        timer.svg = Some(TEST_SVG.into());
+        timer.duration_seconds = Some(600);
+        let timer = store.add_at(timer, 1_000, today).unwrap();
+        let changed = store
+            .update_at(
+                timer.id,
+                StickerUpdate {
+                    appearance: Some(Appearance::Ghost),
+                    x: None,
+                    y: None,
+                    angle: None,
+                    title: None,
+                    text: None,
+                    target: None,
+                    done: None,
+                    action: None,
+                    duration_seconds: None,
+                    svg: None,
+                },
+                1_001,
+                today,
+            )
+            .unwrap();
+        assert!(changed.svg.is_none());
+        let reloaded = Store::load(&dir).unwrap();
+        assert_eq!(
+            reloaded.snapshot_at(1_001, today)[0].svg.as_deref(),
+            Some(TEST_SVG)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn notification_ttl_is_returned_and_expired_notifications_are_removed() {
+        let dir = temp_dir();
+        let store = Store::load(&dir).unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 10, 24).unwrap();
+        let mut notification = input(Kind::Notification, Some("A temporary message"));
+        notification.title = Some("Hello".into());
+        notification.expires_in_seconds = Some(30);
+        let view = store.add_at(notification, 1_000, today).unwrap();
+        assert_eq!(view.expires_at, Some(1_030));
+        assert_eq!(view.state, "notification");
+        assert_eq!(store.snapshot_at(1_029, today).len(), 1);
+        assert_eq!(
+            Store::load(&dir).unwrap().snapshot_at(1_029, today)[0].expires_at,
+            Some(1_030)
+        );
+        assert!(store.snapshot_at(1_030, today).is_empty());
+        assert!(
+            Store::load(&dir)
+                .unwrap()
+                .snapshot_at(1_030, today)
+                .is_empty()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn clock_sticker_has_no_fixed_content_fields() {
+        let dir = temp_dir();
+        let store = Store::load(&dir).unwrap();
+        let view = store
+            .add_at(input(Kind::Clock, None), 1_000, today())
+            .unwrap();
+        assert_eq!(view.kind, Kind::Clock);
+        assert_eq!(view.state, "clock");
+        assert!(view.title.is_none());
+        assert!(view.text.is_none());
+        assert!(view.expires_at.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1245,10 +1959,20 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), br#"{"next_id":2,"stickers":[]}"#);
         fs::write(
             &path,
-            br#"{"version":1,"next_id":2,"stickers":[{"kind":"timer","id":1,"x":20,"y":16,"angle":0,"duration_seconds":1500,"remaining_at_anchor_seconds":1500,"running_since":null,"has_started":false,"created_at":1,"updated_at":1,"text":"legacy-shape"}]}"#,
+            br#"{"version":3,"next_id":2,"stickers":[{"kind":"timer","id":1,"x":20,"y":16,"angle":0,"appearance":"jack_o_lantern","duration_seconds":1500,"remaining_at_anchor_seconds":1500,"running_since":null,"has_started":false,"created_at":1,"updated_at":1,"text":"legacy-shape"}]}"#,
         )
         .unwrap();
         assert!(Store::load(&dir).is_err());
+
+        fs::write(
+            &path,
+            br#"{"version":3,"next_id":2,"stickers":[{"kind":"memo","id":1,"appearance":"ghost","x":20,"y":16,"angle":0,"title":"Existing","text":"Kept","created_at":1,"updated_at":1}]}"#,
+        )
+        .unwrap();
+        let existing = Store::load(&dir).unwrap().snapshot_at(2, today());
+        assert_eq!(existing.len(), 1);
+        assert_eq!(existing[0].title.as_deref(), Some("Existing"));
+        assert!(existing[0].svg.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 }

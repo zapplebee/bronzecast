@@ -78,8 +78,8 @@ def _escape(value):
 
 def _scope_summary(scope):
     labels = {
-        "bronzecast.read": "Read the character, notifications and stream state",
-        "bronzecast.write": "Change the character and manage notifications",
+        "bronzecast.read": "Read the character, stickers and stream state",
+        "bronzecast.write": "Change the character and manage stickers",
         "offline_access": "Stay signed in with a refresh token",
     }
     return [(value, labels.get(value, value)) for value in scope.split()]
@@ -491,7 +491,7 @@ def create_app(settings=None, client_fetcher=None):
                         {
                             "uri": "bronzecast://dashboard/state",
                             "name": "Dashboard state",
-                            "description": "Character, stickers, notifications and stream health snapshot.",
+                            "description": "Character, stickers and stream health snapshot.",
                             "mimeType": "application/json",
                         }
                     ]

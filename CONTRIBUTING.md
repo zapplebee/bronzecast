@@ -28,7 +28,7 @@ Run from the repository root so relative asset paths resolve.
 | `playout/` | Containerized UDP ingest, bounded buffers, test-card/silence fallback, continuous HLS, web/API proxy |
 | `compose.yaml` | Persistent web/playout container and UDP port mapping |
 | `src/characters.rs` | Manifest validation, generic OBJ/material loader, character selection API |
-| `src/notifications.rs` | Notification API and dashboard drawn into the video |
+| `src/stickers.rs`, `src/sticker_art.rs` | Unified sticker API/store and rendered behavior layer |
 | `src/*.vert`, `src/*.frag` | Lighting and normal-pass shaders |
 | `characters/` | Runtime assets, manifest, and provenance notes |
 | `web/` | Video player, character selector, and Cast sender |
@@ -66,11 +66,11 @@ paths inside their character folder. Record attribution in
 
 ## Working with a running display
 
-Model switches use `POST /api/character` without restarting the server. Before a
-necessary restart, preserve desired notifications from `GET /api/notifications`,
-then repost their title/message contents afterward. Selection and notifications
-are currently in memory. Avoid committing captures, personal notification data,
-credentials, or local session exports; `scratch/` is fully ignored.
+Model switches use `POST /api/character` without restarting the server. Selection
+resets to the default character after a renderer restart; stickers persist under
+`BRONZECAST_STATE_DIR`, with notification stickers automatically removed at expiry.
+Avoid committing captures, personal sticker data, credentials, or local session
+exports; `scratch/` is fully ignored.
 
 Leave playout running while iterating on the host renderer. A renderer restart
 must cause fallback and recovery without replacing the HLS output encoder.

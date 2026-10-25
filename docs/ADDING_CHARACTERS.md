@@ -7,8 +7,8 @@ Use the existing three entries in `characters/manifest.json` as working examples
 
 - Runtime format: assembled **OBJ + MTL + PNG textures**, or MTL `Kd` palette colors.
 - Geometry is Y-up after manifest rotation; it faces the camera toward negative Z.
-- Models share the same shader, three rendering passes, animation, lighting, floor,
-  dashboard, notifications, HLS stream, and Cast session.
+- Models share the same shader, three rendering passes, animation, lighting, full-
+  window scene, sticker layer, HLS stream, and Cast session.
 - Selection is server-global. Every video client sees the same selected character.
 
 ## 1. Put assets in a dedicated folder
@@ -79,10 +79,10 @@ stops startup rather than advertising a broken character.
 
 The manifest is read at startup. Adding or changing an entry requires one server
 restart. Switching between already-loaded entries requires **no restart**.
-Notifications and the current selection are in memory; restart resets them.
-Preserve any wanted notification contents with `GET /api/notifications` before
-restarting, and repost those contents afterward. The selection resets to the
-manifest's top-level `default_character`.
+The current character selection is in memory and resets to the manifest's
+`default_character` after restart. Stickers, including notification stickers,
+survive restarts under `BRONZECAST_STATE_DIR`; notification stickers are removed
+when their stored expiry elapses.
 
 ## 4. Switch through the API
 
@@ -118,11 +118,11 @@ Check all of the following:
 
 1. Face points toward the camera; model is upright, assembled, and has source colors.
 2. Texture paths/UV orientation are right; eyes, mouth, feathers/fur are visible.
-3. At bounce peak and lateral extremes, nothing enters the upper status box or
-   notification panel, and feet/shadow remain near the floor.
+3. At bounce peak and lateral extremes, the character remains framed in the
+   full-window scene and feet/shadow remain near the floor.
 4. All parts share the lighting, normal outlines, animation, and projected shadow.
 5. Switch back to `mog`, then to the new character again. Verify both `active_id`
-   and the character label in the video. Notification contents should remain.
+   and the character label in the video. Agent-created stickers should remain.
 6. Existing Cast playback should continue through switches without relaunching it.
 
 Tune only `rotation_degrees` and dimension limits for orientation/framing. If
@@ -134,7 +134,7 @@ Do not "fix" one model by changing the global shaders/camera.
 - `src/characters.rs`: manifest validation, reusable loader, preloaded meshes,
   API selection state. GPU loading stays on the rendering thread.
 - `src/main.rs`: chooses the active entry each frame; all passes use its meshes.
-- `src/notifications.rs`: receives the active display name; no model-ID branches.
+- `src/sticker_art.rs`: shared sticker and behavior renderer; no model-ID branches.
 - `scripts/import-character.py`: offline Blender conversion only. Blender is
   not a server runtime dependency.
 - Opaque diffuse textures/material colors are supported. No PBR, skeletal clips,
