@@ -474,6 +474,20 @@ WRITE_TOOLS = {
 }
 
 
+def list_tools(settings):
+    if not settings.tsx_mcp_enabled:
+        return TOOLS
+    retired = {
+        "bronzecast_list_characters",
+        "bronzecast_switch_character",
+        "bronzecast_list_stickers",
+        "bronzecast_add_sticker",
+        "bronzecast_update_sticker",
+        "bronzecast_remove_sticker",
+    }
+    return [tool for tool in TOOLS if tool["name"] not in retired]
+
+
 async def _json(method, url, payload=None):
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -810,12 +824,22 @@ def _text(value):
 
 
 async def _status_payload(settings):
-    character, stickers, stream = await asyncio.gather(
-        _json("GET", settings.generator_url + "/api/character"),
-        _json("GET", settings.generator_url + "/api/stickers"),
-        _json("GET", settings.playout_url + "/health"),
-        return_exceptions=True,
-    )
+    if settings.tsx_mcp_enabled:
+        character = {"active_id": "mog", "renderer": "Chromium / Three.js"}
+        stickers, stream = await asyncio.gather(
+            _json("GET", settings.tsx_api_url + "/api/stickers"),
+            _json("GET", settings.playout_url + "/health"),
+            return_exceptions=True,
+        )
+        if not isinstance(stickers, Exception):
+            stickers = [_tsx_sticker_summary(sticker) for sticker in stickers]
+    else:
+        character, stickers, stream = await asyncio.gather(
+            _json("GET", settings.generator_url + "/api/character"),
+            _json("GET", settings.generator_url + "/api/stickers"),
+            _json("GET", settings.playout_url + "/health"),
+            return_exceptions=True,
+        )
     payload = {}
     for key, value in (
         ("character", character),
@@ -823,7 +847,7 @@ async def _status_payload(settings):
         ("stream", stream),
     ):
         payload[key] = {"error": str(value)} if isinstance(value, Exception) else value
-    core_failed = isinstance(character, Exception) and isinstance(stickers, Exception)
+    core_failed = isinstance(stickers, Exception) or (not settings.tsx_mcp_enabled and isinstance(character, Exception))
     return payload, core_failed
 
 
@@ -835,7 +859,12 @@ async def call_tool(name, arguments, settings):
     if name == "bronzecast_get_snapshot":
         if arguments:
             raise ToolError("bronzecast_get_snapshot does not accept arguments")
-        png = await _snapshot_png(settings.generator_url + "/api/snapshot")
+        snapshot_url = (
+            settings.tsx_api_url + "/api/snapshot"
+            if settings.tsx_mcp_enabled
+            else settings.generator_url + "/api/snapshot"
+        )
+        png = await _snapshot_png(snapshot_url)
         return {
             "content": [
                 {
@@ -847,6 +876,8 @@ async def call_tool(name, arguments, settings):
         }
 
     if name == "bronzecast_list_characters":
+        if settings.tsx_mcp_enabled:
+            raise ToolError("This Chromium spike currently renders Mog only; there is no character selector.")
         return {"content": [{"type": "text", "text": _text(await _json("GET", settings.generator_url + "/api/character"))}]}
 
     if name == "bronzecast_tsx_list_stickers":
@@ -908,6 +939,9 @@ async def call_tool(name, arguments, settings):
         return {"content": [{"type": "text", "text": f"TSX sticker {sticker_id} removed."}]}
 
     if name == "bronzecast_list_stickers":
+        if settings.tsx_mcp_enabled:
+            stickers = await _json("GET", settings.tsx_api_url + "/api/stickers")
+            return {"content": [{"type": "text", "text": _text([_tsx_sticker_summary(item) for item in stickers])}]}
         return {
             "content": [
                 {
@@ -920,6 +954,8 @@ async def call_tool(name, arguments, settings):
         }
 
     if name == "bronzecast_add_sticker":
+        if settings.tsx_mcp_enabled:
+            raise ToolError("This renderer uses React TSX components; use bronzecast_tsx_create_sticker.")
         result = await _json(
             "POST",
             settings.generator_url + "/api/stickers",
@@ -928,6 +964,8 @@ async def call_tool(name, arguments, settings):
         return {"content": [{"type": "text", "text": _text(result)}]}
 
     if name == "bronzecast_update_sticker":
+        if settings.tsx_mcp_enabled:
+            raise ToolError("This renderer uses React TSX components; use bronzecast_tsx_update_sticker or bronzecast_tsx_set_sticker_state.")
         sticker_id = _sticker_id(arguments)
         result = await _json(
             "PATCH",
@@ -937,6 +975,8 @@ async def call_tool(name, arguments, settings):
         return {"content": [{"type": "text", "text": _text(result)}]}
 
     if name == "bronzecast_remove_sticker":
+        if settings.tsx_mcp_enabled:
+            raise ToolError("This renderer uses React TSX components; use bronzecast_tsx_remove_sticker.")
         sticker_id = _sticker_id(arguments)
         await _json(
             "DELETE",
@@ -948,6 +988,8 @@ async def call_tool(name, arguments, settings):
         return {"content": [{"type": "text", "text": _text(await _json("GET", settings.playout_url + "/health"))}]}
 
     if name == "bronzecast_switch_character":
+        if settings.tsx_mcp_enabled:
+            raise ToolError("This Chromium spike currently renders Mog only; there is no character selector.")
         character_id = arguments.get("id")
         if not isinstance(character_id, str) or not CHARACTER_ID_RE.fullmatch(character_id):
             raise ToolError("id must be a non-empty character id without whitespace")

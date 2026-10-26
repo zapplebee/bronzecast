@@ -1,4 +1,5 @@
 import base64
+from dataclasses import replace
 import hashlib
 import json
 import os
@@ -13,7 +14,7 @@ from starlette.testclient import TestClient
 from mcp import cimd
 from mcp.config import Settings
 from mcp.server import create_app
-from mcp.tools import ToolError
+from mcp.tools import ToolError, list_tools
 
 REDIRECT = "http://127.0.0.1:9999/callback"
 VERIFIER = "A" * 48
@@ -568,6 +569,17 @@ class MCPTests(unittest.TestCase):
             ("PUT", "http://tsx.test/api/stickers/41/state", {"complete": True}),
             calls,
         )
+
+    def test_tsx_mode_exposes_component_tools_instead_of_legacy_sticker_types(self):
+        settings = replace(self.settings, tsx_mcp_enabled=True)
+        names = {tool["name"] for tool in list_tools(settings)}
+        self.assertIn("bronzecast_tsx_create_sticker", names)
+        self.assertIn("bronzecast_tsx_set_sticker_state", names)
+        self.assertIn("bronzecast_get_snapshot", names)
+        self.assertIn("bronzecast_stream_status", names)
+        self.assertNotIn("bronzecast_add_sticker", names)
+        self.assertNotIn("bronzecast_list_stickers", names)
+        self.assertNotIn("bronzecast_switch_character", names)
 
     def test_sticker_validation(self):
         _, tokens = self.tokens()

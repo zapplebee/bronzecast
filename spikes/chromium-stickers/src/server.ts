@@ -245,6 +245,17 @@ const server = Bun.serve({
     if (request.method === "GET" && url.pathname === "/health") {
       return json({ status: "ok", service: "chromium-sticker-spike", fps: FPS, width: WIDTH, height: HEIGHT, stickers: stickers.size });
     }
+    if (request.method === "GET" && url.pathname === "/api/snapshot") {
+      if (!capturePage) return error("capture page is not ready", 503);
+      try {
+        const png = await capturePage.screenshot({ type: "png", animations: "allow" });
+        return new Response(png, {
+          headers: { "Content-Type": "image/png", "Cache-Control": "no-store" },
+        });
+      } catch (cause) {
+        return error(cause instanceof Error ? cause.message : String(cause), 503);
+      }
+    }
     if (request.method === "GET" && url.pathname === "/api/stickers") {
       return json([...stickers.values()]);
     }

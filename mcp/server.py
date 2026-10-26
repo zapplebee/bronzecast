@@ -450,7 +450,7 @@ def create_app(settings=None, client_fetcher=None):
         if method == "ping":
             return rpc_result(request_id, {})
         if method == "tools/list":
-            return rpc_result(request_id, {"tools": tools.TOOLS})
+            return rpc_result(request_id, {"tools": tools.list_tools(settings)})
         if method == "tools/call":
             name = params.get("name")
             if not isinstance(name, str):

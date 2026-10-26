@@ -38,6 +38,7 @@ services:
   mcp:
     environment:
       BRONZECAST_TSX_API_URL: "http://bronzecast-chromium:8091"
+      BRONZECAST_TSX_MCP_ENABLED: "true"
 networks:
   nyx_svc_dev:
     external: true
